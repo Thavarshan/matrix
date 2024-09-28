@@ -134,7 +134,7 @@ class AsyncHelper
             // Handle task success
             if ($this->task->isCompleted()) {
                 $this->result = $this->task->getResult();
-                
+
                 if ($this->onSuccess) {
                     ($this->onSuccess)($this->result);
                 }
