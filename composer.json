@@ -1,7 +1,7 @@
 {
     "name": "jerome/matrix",
-    "description": "A modern, lightweight PHP HTTP client with true asynchronous and seamless request handling.",
-    "version": "1.1.0",
+    "description": "An unparalleled PHP asynchronous experience, offering genuine concurrency and fiber-based task management.",
+    "version": "0.0.1",
     "type": "library",
     "license": "MIT",
     "authors": [
