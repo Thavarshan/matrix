@@ -200,6 +200,16 @@ Matrix is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for
 
 ---
 
+## Authors
+
+- **[Jerome Thayananthajothy]** - *Initial work* - [Thavarshan](https://github.com/Thavarshan)
+
+See also the list of [contributors](https://github.com/Thavarshan/fetch-php/contributors) who participated in this project.
+
+## Acknowledgments
+
+- Special thanks to the PHP community for their support and inspiration for this project.
+
 ## **Get Involved**
 
 Matrix offers a unique PHP async experience, bringing true concurrency and fiber-based task management to PHP developers. **Star the repository on GitHub** to help Matrix grow and to stay updated on new features.
