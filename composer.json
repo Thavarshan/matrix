@@ -1,0 +1,67 @@
+{
+    "name": "jerome/matrix",
+    "description": "A modern, lightweight PHP HTTP client with true asynchronous and seamless request handling.",
+    "version": "1.1.0",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jerome Thayananthajothy",
+            "email": "tjthavarshan@gmail.com"
+        }
+    ],
+    "homepage": "https://thavarshan.com",
+    "support": {
+        "issues": "https://github.com/Thavarshan/matrix/issues",
+        "source": "https://github.com/Thavarshan/matrix"
+    },
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/psr7": "^2.1",
+        "guzzlehttp/guzzle": "^7.0",
+        "psr/http-client": "^1.0",
+        "psr/http-message": "^2.0",
+        "symfony/cache": "^7.0",
+        "symfony/var-dumper": "^7.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "mockery/mockery": "^1.6",
+        "pestphp/pest": "^3.0",
+        "php-mock/php-mock": "^2.5",
+        "php-mock/php-mock-mockery": "^1.4",
+        "phpstan/phpstan": "^1.11.5",
+        "squizlabs/php_codesniffer": "^3.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Matrix\\": "src/Matrix/"
+        },
+        "files": [
+            "src/Matrix/Support/async.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "chmod +x bin/analysis.sh && ./bin/analysis.sh",
+        "lint": "chmod +x bin/lint.sh && ./bin/lint.sh",
+        "fix": "chmod +x bin/fix.sh && ./bin/fix.sh"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true,
+            "php-http/discovery": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "pestphp/pest-plugin": true
+        },
+        "optimize-autoloader": true,
+        "preferred-install": "dist"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

@@ -1,0 +1,14 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+
+    paths:
+        - src/Matrix
+
+    level: 4
+
+    excludePaths:
+
+    checkMissingIterableValueType: false
+    treatPhpDocTypesAsCertain: false
