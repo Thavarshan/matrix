@@ -16,9 +16,7 @@
         "source": "https://github.com/Thavarshan/matrix"
     },
     "require": {
-        "php": "^8.2",
-        "symfony/cache": "^7.0",
-        "symfony/var-dumper": "^7.0"
+        "php": "^8.2"
     },
     "require-dev": {
         "guzzlehttp/guzzle": "^7.0",
