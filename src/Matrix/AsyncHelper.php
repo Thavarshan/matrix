@@ -2,73 +2,81 @@
 
 namespace Matrix;
 
+use Matrix\Enum\TaskStatus;
 use Matrix\Exceptions\Handler;
 use Matrix\Interfaces\ErrorHandler;
 use Throwable;
 
+/**
+ * Class AsyncHelper
+ *
+ * @package Matrix
+ */
 class AsyncHelper
 {
     /**
-     * The promise to execute.
+     * The promise to execute asynchronously.
      *
      * @var callable
      */
     protected $promise;
 
     /**
-     * The callback to execute on success.
+     * The success callback.
      *
      * @var callable|null
      */
     protected $onSuccess;
 
     /**
-     * The callback to execute on error.
+     * The error callback.
      *
      * @var callable|null
      */
     protected $onError;
 
     /**
-     * The error that occurred during the async operation.
+     * The error that occurred during the task execution.
      *
      * @var Throwable|null
      */
     protected ?Throwable $error = null;
 
     /**
-     * The result of the task if it was successful.
+     * The result of the task execution.
      *
      * @var mixed|null
      */
     protected $result = null;
 
     /**
-     * The error handler for managing errors.
+     * The error handler for handling task errors.
      *
      * @var \Matrix\Interfaces\ErrorHandler
      */
     protected ErrorHandler $errorHandler;
 
     /**
-     * The task instance managing this async operation.
+     * The task to execute asynchronously.
      *
      * @var \Matrix\Task
      */
     protected Task $task;
 
     /**
-     * Indicates whether the task has been started.
+     * Indicates if the task has started.
      *
      * @var bool
      */
     protected bool $taskStarted = false;
 
     /**
-     * Constructor for the AsyncHelper.
+     * AsyncHelper constructor.
      *
-     * @param callable                             $promise      The promise to execute.
-     * @param \Matrix\Interfaces\ErrorHandler|null $errorHandler The error handler for managing errors.
+     * @param callable          $promise
+     * @param ErrorHandler|null $errorHandler
+     *
+     * @return void
      */
     public function __construct(callable $promise, ?ErrorHandler $errorHandler = null)
     {
@@ -78,50 +86,46 @@ class AsyncHelper
     }
 
     /**
-     * Handle successful responses.
+     * Sets the success callback and starts the task.
      *
      * @param callable $callback
      *
-     * @return $this
+     * @return self
      */
     public function then(callable $callback): self
     {
         $this->onSuccess = $callback;
-        $this->start(); // Start the task when 'then' is registered
+        $this->start();
 
         return $this;
     }
 
     /**
-     * Handle errors or exceptions.
+     * Sets the error callback and starts the task.
      *
      * @param callable $callback
      *
-     * @return $this
+     * @return self
      */
     public function catch(callable $callback): self
     {
         $this->onError = $callback;
-        $this->start(); // Start the task when 'catch' is registered
+        $this->start();
 
         return $this;
     }
 
     /**
-     * Start the async task manually if not already started.
-     *
-     * @return void
+     * Starts the task.
      */
     public function start(): void
     {
-        // Handle any existing errors
         if ($this->error && $this->onError) {
             ($this->onError)($this->error);
 
             return;
         }
 
-        // Avoid starting the task more than once
         if ($this->taskStarted || $this->task->isCompleted()) {
             return;
         }
@@ -131,27 +135,92 @@ class AsyncHelper
         try {
             $this->task->start();
 
-            // Handle task success
             if ($this->task->isCompleted()) {
                 $this->result = $this->task->getResult();
-
                 if ($this->onSuccess) {
                     ($this->onSuccess)($this->result);
                 }
             }
         } catch (Throwable $e) {
-            $this->errorHandler->handle(
-                uniqid('task_', true),
-                $this->task,
-                $e
-            );
-
+            $this->errorHandler->handle(uniqid('task_', true), $this->task, $e);
             $this->error = $e;
-
-            // Call error callback
             if ($this->onError) {
                 ($this->onError)($this->error);
             }
         }
+    }
+
+    /**
+     * Pauses the task.
+     */
+    public function pause(): void
+    {
+        $this->task->pause();
+    }
+
+    /**
+     * Resumes the task.
+     */
+    public function resume(): void
+    {
+        $this->task->resume();
+    }
+
+    /**
+     * Cancels the task.
+     */
+    public function cancel(): void
+    {
+        $this->task->cancel();
+    }
+
+    /**
+     * Retries the task.
+     */
+    public function retry(): void
+    {
+        $this->task->retry();
+
+        $this->task->start();
+    }
+
+    /**
+     * Gets the status of the task.
+     *
+     * @return \Matrix\Enum\TaskStatus
+     */
+    public function getStatus(): TaskStatus
+    {
+        return $this->task->getStatus();
+    }
+
+    /**
+     * Gets the result of the task.
+     *
+     * @return mixed
+     */
+    public function getResult()
+    {
+        return $this->task->getResult();
+    }
+
+    /**
+     * Gets the task.
+     *
+     * @return \Matrix\Task
+     */
+    public function getTask(): Task
+    {
+        return $this->task;
+    }
+
+    /**
+     * Checks if the task is completed.
+     *
+     * @return bool
+     */
+    public function isCompleted(): bool
+    {
+        return $this->task->isCompleted();
     }
 }

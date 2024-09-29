@@ -83,9 +83,12 @@ class Task
         // If the fiber is suspended, mark the task as running and await resume
         if ($this->fiber->isSuspended()) {
             $this->setStatus(TaskStatus::RUNNING);
-        } elseif ($this->fiber->isTerminated()) {
+        }
+
+        if ($this->fiber->isTerminated()) {
             // If the fiber has terminated, store the result and mark the task as completed
             $this->result = $this->fiber->getReturn();
+
             $this->setStatus(TaskStatus::COMPLETED);
         }
     }

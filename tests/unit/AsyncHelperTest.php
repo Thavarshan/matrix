@@ -134,6 +134,83 @@ test('handles task lifecycle correctly', function () {
 });
 
 /**
+ * Test task cancellation in AsyncHelper.
+ */
+test('cancels task correctly', function () {
+    $asyncHelper = new AsyncHelper(fn () => 'Task result');
+
+    // Manually cancel the task
+    $asyncHelper->cancel();
+
+    expect($asyncHelper->getStatus())->toBe(TaskStatus::CANCELED);
+});
+
+/**
+ * Test task retry functionality.
+ */
+test('retries task correctly', function () {
+    // Move $attempt outside of the closure so it is preserved across retries
+    $attempt = 0;
+    $asyncHelper = new AsyncHelper(function () use (&$attempt) {
+        if (++$attempt < 2) {
+            throw new \Exception('Fail');
+        }
+
+        return 'Retry Success';
+    });
+
+    $asyncHelper->catch(function ($e) {
+        expect($e->getMessage())->toBe('Fail'); // First attempt should fail
+    });
+
+    // Retry the task after failure
+    $asyncHelper->retry();
+
+    // Ensure the task was retried and completed successfully
+    expect($asyncHelper->getStatus())->toBe(TaskStatus::COMPLETED); // Should be completed after retry
+    expect($asyncHelper->getResult())->toBe('Retry Success'); // Ensure the result is correct
+});
+
+/**
+ * Test the async helper method with task control.
+ */
+test('helper method handles task with control methods correctly', function () {
+    $message = '';
+
+    // Use async helper to automatically start the task
+    async(fn () => 'Task result')
+        ->then(function ($res) use (&$message) {
+            $message = $res;
+        });
+
+    expect($message)->toBe('Task result');
+
+    // Test task cancellation
+    $asyncHelper = async(fn () => 'Task result');
+    $asyncHelper->cancel();
+    expect($asyncHelper->getStatus())->toBe(TaskStatus::CANCELED);
+
+    // Test task retry
+    $attempt = 0;
+    $retryAsync = async(function () use (&$attempt) {
+        if (++$attempt < 2) {
+            throw new \Exception('Error on first try');
+        }
+
+        return 'Retry Success';
+    });
+
+    $retryAsync->catch(function ($e) {
+        expect($e->getMessage())->toBe('Error on first try'); // First attempt should fail
+    });
+
+    $retryAsync->retry();
+
+    expect($retryAsync->getStatus())->toBe(TaskStatus::COMPLETED);
+    expect($retryAsync->getResult())->toBe('Retry Success');
+});
+
+/**
  * Test the async helper method.
  */
 test('helper method handles task correctly', function () {
