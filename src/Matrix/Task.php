@@ -6,9 +6,10 @@ use Exception;
 use Fiber;
 use Matrix\Enum\TaskStatus;
 use Matrix\Interfaces\ErrorHandler as HandlerInterface;
+use Matrix\Interfaces\Task as TaskInterface;
 use Throwable;
 
-class Task
+class Task implements TaskInterface
 {
     /**
      * The fiber responsible for executing the task.
@@ -52,6 +53,8 @@ class Task
      *
      * @param callable                             $callable     The function that defines the task's execution.
      * @param \Matrix\Interfaces\ErrorHandler|null $errorHandler The error handler for handling task errors.
+     *
+     * @return void
      */
     public function __construct(callable $callable, ?HandlerInterface $errorHandler = null)
     {
@@ -65,6 +68,8 @@ class Task
      * Start the task by activating the fiber.
      *
      * Changes the task status to `RUNNING`. Throws an exception if the task has already started.
+     *
+     * @return void
      *
      * @throws Exception If the task has already started or failed during execution.
      */
@@ -116,7 +121,7 @@ class Task
     /**
      * Get the current status of the task.
      *
-     * @return TaskStatus The current status of the task.
+     * @return \Matrix\Enum\TaskStatus The current status of the task.
      */
     public function getStatus(): TaskStatus
     {
@@ -232,7 +237,7 @@ class Task
      *
      * Updates the current status of the task.
      *
-     * @param TaskStatus $status The new status of the task.
+     * @param \Matrix\Enum\TaskStatus $status The new status of the task.
      */
     public function setStatus(TaskStatus $status): void
     {
@@ -246,7 +251,7 @@ class Task
      *
      * @throws Throwable If no error handler is provided.
      */
-    protected function handleError(Throwable $e): void
+    public function handleError(Throwable $e): void
     {
         if (! $this->errorHandler) {
             throw $e; // If no error handler is provided, rethrow the error.

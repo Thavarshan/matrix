@@ -79,13 +79,14 @@ class Handler implements HandlerInterface
         $this->logGenericError($contextId, $context, $e);
     }
 
-
     /**
      * Handles the task error by logging the error, checking if it is recoverable, and retrying if possible.
      *
      * @param string       $contextId Unique identifier for the task (e.g., task ID).
      * @param \Matrix\Task $task      The task object associated with the error.
      * @param Throwable    $e         The exception that occurred.
+     *
+     * @return void
      */
     protected function handleTaskError(string $contextId, Task $task, Throwable $e): void
     {
@@ -108,13 +109,14 @@ class Handler implements HandlerInterface
         $this->handleFinalFailure($contextId, $task, $e);
     }
 
-
     /**
      * Logs the task error, providing context and details about the failure.
      *
      * @param string       $taskId The unique task identifier.
      * @param \Matrix\Task $task   The task object that encountered the error.
      * @param Throwable    $e      The exception that caused the task to fail.
+     *
+     * @return void
      */
     protected function logTaskError(string $taskId, Task $task, Throwable $e): void
     {
@@ -133,13 +135,14 @@ class Handler implements HandlerInterface
             : error_log($message);
     }
 
-
     /**
      * Logs the error for generic contexts (non-Task contexts).
      *
      * @param string    $contextId The unique identifier for the context.
      * @param mixed     $context   The context in which the error occurred (e.g., Request, Response).
      * @param Throwable $e         The exception that caused the error.
+     *
+     * @return void
      */
     protected function logGenericError(string $contextId, $context, Throwable $e): void
     {
@@ -191,6 +194,8 @@ class Handler implements HandlerInterface
      *
      * @param string       $taskId The unique task identifier.
      * @param \Matrix\Task $task   The task object to retry.
+     *
+     * @return void
      */
     protected function retryTask(string $taskId, Task $task): void
     {
@@ -211,6 +216,8 @@ class Handler implements HandlerInterface
      * @param string       $taskId The unique task identifier.
      * @param \Matrix\Task $task   The task that failed.
      * @param Throwable    $e      The exception that caused the final failure.
+     *
+     * @return void
      */
     protected function handleFinalFailure(string $taskId, Task $task, Throwable $e): void
     {
@@ -230,6 +237,8 @@ class Handler implements HandlerInterface
      * Sets the list of recoverable exceptions.
      *
      * @param array<string> $recoverableExceptions Array of exception class names considered recoverable.
+     *
+     * @return void
      */
     public static function setRecoverableExceptions(array $recoverableExceptions): void
     {

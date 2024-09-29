@@ -4,15 +4,11 @@ namespace Matrix;
 
 use Matrix\Enum\TaskStatus;
 use Matrix\Exceptions\Handler;
+use Matrix\Interfaces\AsyncHelper as AsyncHelperInterface;
 use Matrix\Interfaces\ErrorHandler;
 use Throwable;
 
-/**
- * Class AsyncHelper
- *
- * @package Matrix
- */
-class AsyncHelper
+class AsyncHelper implements AsyncHelperInterface
 {
     /**
      * The promise to execute asynchronously.
@@ -117,6 +113,8 @@ class AsyncHelper
 
     /**
      * Starts the task.
+     *
+     * @return void
      */
     public function start(): void
     {
@@ -152,6 +150,8 @@ class AsyncHelper
 
     /**
      * Pauses the task.
+     *
+     * @return void
      */
     public function pause(): void
     {
@@ -168,6 +168,8 @@ class AsyncHelper
 
     /**
      * Cancels the task.
+     *
+     * @return void
      */
     public function cancel(): void
     {
@@ -176,6 +178,8 @@ class AsyncHelper
 
     /**
      * Retries the task.
+     *
+     * @return void
      */
     public function retry(): void
     {
