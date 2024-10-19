@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Matrix;
 
 use Exception;
@@ -13,8 +15,6 @@ class Task implements TaskInterface
 {
     /**
      * The fiber responsible for executing the task.
-     *
-     * @var Fiber
      */
     protected Fiber $fiber;
 
@@ -27,15 +27,11 @@ class Task implements TaskInterface
 
     /**
      * The status of the task (e.g., pending, running, completed, failed, paused, canceled).
-     *
-     * @var \Matrix\Enum\TaskStatus
      */
     protected TaskStatus $status;
 
     /**
      * The error handler for handling task errors.
-     *
-     * @var \Matrix\Interfaces\ErrorHandler|null
      */
     protected ?HandlerInterface $errorHandler;
 
@@ -51,9 +47,8 @@ class Task implements TaskInterface
      *
      * Initializes a new task with the given callable function and sets its initial status to `PENDING`.
      *
-     * @param callable                             $callable     The function that defines the task's execution.
-     * @param \Matrix\Interfaces\ErrorHandler|null $errorHandler The error handler for handling task errors.
-     *
+     * @param  callable  $callable  The function that defines the task's execution.
+     * @param  \Matrix\Interfaces\ErrorHandler|null  $errorHandler  The error handler for handling task errors.
      * @return void
      */
     public function __construct(callable $callable, ?HandlerInterface $errorHandler = null)
@@ -69,7 +64,6 @@ class Task implements TaskInterface
      *
      * Changes the task status to `RUNNING`. Throws an exception if the task has already started.
      *
-     * @return void
      *
      * @throws Exception If the task has already started or failed during execution.
      */
@@ -237,7 +231,7 @@ class Task implements TaskInterface
      *
      * Updates the current status of the task.
      *
-     * @param \Matrix\Enum\TaskStatus $status The new status of the task.
+     * @param  \Matrix\Enum\TaskStatus  $status  The new status of the task.
      */
     public function setStatus(TaskStatus $status): void
     {
@@ -247,7 +241,7 @@ class Task implements TaskInterface
     /**
      * Handles any errors that occur during task execution.
      *
-     * @param Throwable $e The exception or error that occurred.
+     * @param  Throwable  $e  The exception or error that occurred.
      *
      * @throws Throwable If no error handler is provided.
      */

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Matrix\Enum\TaskStatus;
 use Matrix\Exceptions\Handler;
 use Matrix\Task;

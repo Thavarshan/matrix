@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use Matrix\Exceptions\Handler;
@@ -11,12 +13,12 @@ define('MAX_RETRIES', 3);
  * Integration test for asynchronous HTTP requests using Task and Fiber.
  */
 test('handles multiple asynchronous HTTP requests', function () {
-    $client = new Client(); // Guzzle client for making HTTP requests
+    $client = new Client; // Guzzle client for making HTTP requests
     $errorHandler = new Handler(MAX_RETRIES, [\RuntimeException::class]); // Error handler
     $requests = [
         new Request('GET', 'https://jsonplaceholder.typicode.com/todos/2'),
         new Request('GET', 'https://jsonplaceholder.typicode.com/todos/1'),
-        new Request('GET', 'https://jsonplaceholder.typicode.com/todos/3')
+        new Request('GET', 'https://jsonplaceholder.typicode.com/todos/3'),
     ];
 
     // Array to store the results
@@ -51,20 +53,20 @@ test('handles multiple asynchronous HTTP requests', function () {
 
     // Optionally, check specific response data for each task
     expect(json_decode($results[0], true))->toMatchArray([
-        'id' => 2,
-        'title' => 'quis ut nam facilis et officia qui',
+        'id'        => 2,
+        'title'     => 'quis ut nam facilis et officia qui',
         'completed' => false,
     ]);
 
     expect(json_decode($results[1], true))->toMatchArray([
-        'id' => 1,
-        'title' => 'delectus aut autem',
+        'id'        => 1,
+        'title'     => 'delectus aut autem',
         'completed' => false,
     ]);
 
     expect(json_decode($results[2], true))->toMatchArray([
-        'id' => 3,
-        'title' => 'fugiat veniam minus',
+        'id'        => 3,
+        'title'     => 'fugiat veniam minus',
         'completed' => false,
     ]);
 });
@@ -73,7 +75,7 @@ test('handles multiple asynchronous HTTP requests', function () {
  * Integration test for testing the async helper function and AsyncHelper class.
  */
 test('executes multiple asynchronous tasks using async helper', function () {
-    $client = new Client();
+    $client = new Client;
     $responses = [];
     $errors = [];
 
@@ -105,20 +107,20 @@ test('executes multiple asynchronous tasks using async helper', function () {
 
     // Optional: Validate specific response data for each async task
     expect($responses[0])->toMatchArray([
-        'id' => 1,
-        'title' => 'delectus aut autem',
+        'id'        => 1,
+        'title'     => 'delectus aut autem',
         'completed' => false,
     ]);
 
     expect($responses[1])->toMatchArray([
-        'id' => 2,
-        'title' => 'quis ut nam facilis et officia qui',
+        'id'        => 2,
+        'title'     => 'quis ut nam facilis et officia qui',
         'completed' => false,
     ]);
 
     expect($responses[2])->toMatchArray([
-        'id' => 3,
-        'title' => 'fugiat veniam minus',
+        'id'        => 3,
+        'title'     => 'fugiat veniam minus',
         'completed' => false,
     ]);
 });
@@ -127,7 +129,7 @@ test('executes multiple asynchronous tasks using async helper', function () {
  * Integration test to validate asynchronous task behavior with error handling.
  */
 test('handles asynchronous errors using async helper', function () {
-    $client = new Client();
+    $client = new Client;
     $responses = [];
     $errors = [];
 
@@ -156,8 +158,8 @@ test('handles asynchronous errors using async helper', function () {
 
     // Assert that the valid request succeeded
     expect($responses[0])->toMatchArray([
-        'id' => 1,
-        'title' => 'delectus aut autem',
+        'id'        => 1,
+        'title'     => 'delectus aut autem',
         'completed' => false,
     ]);
 });
@@ -176,9 +178,9 @@ test('executes asynchronous tasks concurrently', function () {
 
         return 'Task 1 result';
     })
-    ->then(function ($res) use (&$responses) {
-        $responses[] = $res;
-    });
+        ->then(function ($res) use (&$responses) {
+            $responses[] = $res;
+        });
 
     async(function () use (&$timings) {
         usleep(300000); // 300ms delay
@@ -186,9 +188,9 @@ test('executes asynchronous tasks concurrently', function () {
 
         return 'Task 2 result';
     })
-    ->then(function ($res) use (&$responses) {
-        $responses[] = $res;
-    });
+        ->then(function ($res) use (&$responses) {
+            $responses[] = $res;
+        });
 
     // Ensure we have exactly 2 responses (both tasks completed)
     expect(count($responses))->toBe(2);

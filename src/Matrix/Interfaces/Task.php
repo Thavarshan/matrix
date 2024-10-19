@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Matrix\Interfaces;
 
 use Exception;
@@ -13,7 +15,6 @@ interface Task
      *
      * Changes the task status to `RUNNING`. Throws an exception if the task has already started.
      *
-     * @return void
      *
      * @throws Exception If the task has already started or failed during execution.
      */
@@ -45,7 +46,6 @@ interface Task
      *
      * Cancels the task if it is not already canceled or completed.
      *
-     * @return void
      *
      * @throws Exception If the task is already canceled or completed.
      */
@@ -56,7 +56,6 @@ interface Task
      *
      * Retries the task by resetting the fiber. The task can only be retried if it has completed or failed.
      *
-     * @return void
      *
      * @throws Exception If the task is not completed or failed.
      */
@@ -67,7 +66,6 @@ interface Task
      *
      * Pauses the task if it is running.
      *
-     * @return void
      *
      * @throws Exception If the task is not running.
      */
@@ -78,7 +76,6 @@ interface Task
      *
      * Resumes the task if it is in the `PAUSED` state.
      *
-     * @return void
      *
      * @throws Exception If the task is not paused.
      */
@@ -98,18 +95,14 @@ interface Task
      *
      * Updates the current status of the task.
      *
-     * @param \Matrix\Enum\TaskStatus $status The new status of the task.
-     *
-     * @return void
+     * @param  \Matrix\Enum\TaskStatus  $status  The new status of the task.
      */
     public function setStatus(TaskStatus $status): void;
 
     /**
      * Handles any errors that occur during task execution.
      *
-     * @param Throwable $e The exception or error that occurred.
-     *
-     * @return void
+     * @param  Throwable  $e  The exception or error that occurred.
      *
      * @throws Throwable If no error handler is provided.
      */

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Matrix;
 
 use Matrix\Enum\TaskStatus;
@@ -33,8 +35,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * The error that occurred during the task execution.
-     *
-     * @var Throwable|null
      */
     protected ?Throwable $error = null;
 
@@ -47,46 +47,34 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * The error handler for handling task errors.
-     *
-     * @var \Matrix\Interfaces\ErrorHandler
      */
     protected ErrorHandler $errorHandler;
 
     /**
      * The task to execute asynchronously.
-     *
-     * @var \Matrix\Task
      */
     protected Task $task;
 
     /**
      * Indicates if the task has started.
-     *
-     * @var bool
      */
     protected bool $taskStarted = false;
 
     /**
      * AsyncHelper constructor.
      *
-     * @param callable          $promise
-     * @param ErrorHandler|null $errorHandler
      *
      * @return void
      */
     public function __construct(callable $promise, ?ErrorHandler $errorHandler = null)
     {
         $this->promise = $promise;
-        $this->errorHandler = $errorHandler ?? new Handler();
+        $this->errorHandler = $errorHandler ?? new Handler;
         $this->task = new Task($this->promise);
     }
 
     /**
      * Sets the success callback and starts the task.
-     *
-     * @param callable $callback
-     *
-     * @return self
      */
     public function then(callable $callback): self
     {
@@ -98,10 +86,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Sets the error callback and starts the task.
-     *
-     * @param callable $callback
-     *
-     * @return self
      */
     public function catch(callable $callback): self
     {
@@ -113,8 +97,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Starts the task.
-     *
-     * @return void
      */
     public function start(): void
     {
@@ -135,6 +117,7 @@ class AsyncHelper implements AsyncHelperInterface
 
             if ($this->task->isCompleted()) {
                 $this->result = $this->task->getResult();
+
                 if ($this->onSuccess) {
                     ($this->onSuccess)($this->result);
                 }
@@ -142,6 +125,7 @@ class AsyncHelper implements AsyncHelperInterface
         } catch (Throwable $e) {
             $this->errorHandler->handle(uniqid('task_', true), $this->task, $e);
             $this->error = $e;
+
             if ($this->onError) {
                 ($this->onError)($this->error);
             }
@@ -150,8 +134,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Pauses the task.
-     *
-     * @return void
      */
     public function pause(): void
     {
@@ -168,8 +150,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Cancels the task.
-     *
-     * @return void
      */
     public function cancel(): void
     {
@@ -178,8 +158,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Retries the task.
-     *
-     * @return void
      */
     public function retry(): void
     {
@@ -190,8 +168,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Gets the status of the task.
-     *
-     * @return \Matrix\Enum\TaskStatus
      */
     public function getStatus(): TaskStatus
     {
@@ -210,8 +186,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Gets the task.
-     *
-     * @return \Matrix\Task
      */
     public function getTask(): Task
     {
@@ -220,8 +194,6 @@ class AsyncHelper implements AsyncHelperInterface
 
     /**
      * Checks if the task is completed.
-     *
-     * @return bool
      */
     public function isCompleted(): bool
     {

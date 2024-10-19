@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Matrix\AsyncHelper;
 use Matrix\Enum\TaskStatus;
 use Matrix\Exceptions\Handler;
@@ -10,7 +12,7 @@ use Matrix\Exceptions\Handler;
 test('executes task asynchronously and returns result', function () {
     $result = 'Async Result';
 
-    $asyncHelper = new AsyncHelper(fn () => $result, new Handler());
+    $asyncHelper = new AsyncHelper(fn () => $result, new Handler);
 
     // Execute and verify the result
     $asyncHelper->then(function ($res) use ($result) {
@@ -65,7 +67,7 @@ test('does not call then callback on error', function () {
 
     $asyncHelper = new AsyncHelper(function () use ($exception) {
         throw $exception;
-    }, new Handler());
+    }, new Handler);
 
     // This should not be called because an exception occurs
     $asyncHelper->then(function () use (&$wasCalled) {
@@ -83,7 +85,7 @@ test('does not call catch callback on success', function () {
     $result = 'Success';
     $wasCalled = false;
 
-    $asyncHelper = new AsyncHelper(fn () => $result, new Handler());
+    $asyncHelper = new AsyncHelper(fn () => $result, new Handler);
 
     // This should not be called because no error occurs
     $asyncHelper->catch(function () use (&$wasCalled) {
@@ -101,7 +103,7 @@ test('integrates Task and ErrorHandler correctly', function () {
     $result = 'Task Success';
     $wasErrorCalled = false;
 
-    $asyncHelper = new AsyncHelper(fn () => $result, new Handler());
+    $asyncHelper = new AsyncHelper(fn () => $result, new Handler);
 
     // Simulate a success scenario
     $asyncHelper
@@ -122,7 +124,7 @@ test('handles task lifecycle correctly', function () {
     $result = 'Lifecycle Success';
     $taskStatus = TaskStatus::PENDING;
 
-    $asyncHelper = new AsyncHelper(fn () => $result, new Handler());
+    $asyncHelper = new AsyncHelper(fn () => $result, new Handler);
 
     $asyncHelper->then(function ($res) use (&$taskStatus) {
         expect($res)->toBe('Lifecycle Success'); // Validate result
