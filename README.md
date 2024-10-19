@@ -4,7 +4,7 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
 [![Tests](https://github.com/Thavarshan/matrix/actions/workflows/run-tests.yml/badge.svg?label=tests&branch=main)](https://github.com/Thavarshan/matrix/actions/workflows/run-tests.yml)
-[![Check & fix styling](https://github.com/Thavarshan/matrix/actions/workflows/php-cs-fixer.yml/badge.svg?label=code%20style&branch=main)](https://github.com/Thavarshan/matrix/actions/workflows/run-tests.yml)
+[![Check & fix styling](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml/badge.svg)](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
 
 **Matrix** is a cutting-edge PHP library for asynchronous task management, inspired by JavaScript’s `async`/`await` paradigm but leveraging PHP's native Fibers. Matrix provides a streamlined, non-blocking API to run tasks, manage errors, and handle results—all without the need for explicit task starting.
