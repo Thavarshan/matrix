@@ -1,7 +1,7 @@
 {
     "name": "jerome/matrix",
     "description": "An unparalleled PHP asynchronous experience, offering genuine concurrency and fiber-based task management.",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "type": "library",
     "license": "MIT",
     "authors": [
