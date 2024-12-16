@@ -1,7 +1,7 @@
 {
     "name": "jerome/matrix",
     "description": "An unparalleled PHP asynchronous experience, offering genuine concurrency and fiber-based task management.",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -16,24 +16,30 @@
         "source": "https://github.com/Thavarshan/matrix"
     },
     "require": {
-        "php": "^8.3 || ^8.4"
+        "php": "^8.2",
+        "ext-pcntl": "*",
+        "ext-posix": "*",
+        "react/event-loop": "^1.5",
+        "react/promise": "^3.2"
     },
     "require-dev": {
-        "guzzlehttp/guzzle": "^7.0",
         "friendsofphp/php-cs-fixer": "^3.65",
+        "guzzlehttp/guzzle": "^7.0",
+        "laravel/pint": "^1.18",
         "mockery/mockery": "^1.6",
         "pestphp/pest": "^3.0",
         "php-mock/php-mock": "^2.5",
         "php-mock/php-mock-mockery": "^1.4",
         "phpstan/phpstan": "^1.11.5",
-        "squizlabs/php_codesniffer": "^3.11"
+        "squizlabs/php_codesniffer": "^3.11",
+        "symfony/var-dumper": "^7.2"
     },
     "autoload": {
         "psr-4": {
             "Matrix\\": "src/Matrix/"
         },
         "files": [
-            "src/Matrix/Support/async.php"
+            "src/Matrix/async.php"
         ]
     },
     "autoload-dev": {
