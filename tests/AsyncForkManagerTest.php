@@ -3,52 +3,8 @@
 declare(strict_types=1);
 
 use Matrix\AsyncProcessManager;
-use React\EventLoop\Loop;
-use React\Promise\PromiseInterface;
 
 uses()->group('manager', 'async');
-
-/**
- * Runs the event loop until the given promise settles or a timeout is reached.
- *
- * @param  PromiseInterface<mixed, \Throwable>  $promise  The promise to await.
- * @param  float  $timeout  Maximum time in seconds to wait.
- * @return mixed The resolved value of the promise.
- *
- * @throws \Throwable If the promise rejects.
- */
-function awaitPromise(PromiseInterface $promise, float $timeout = 2.0)
-{
-    $resolved = false;
-    $rejected = false;
-    $result = null;
-    $error = null;
-
-    $promise->then(
-        function ($val) use (&$resolved, &$result) {
-            $resolved = true;
-            $result = $val;
-            Loop::stop();
-        },
-        function ($err) use (&$rejected, &$error) {
-            $rejected = true;
-            $error = $err;
-            Loop::stop();
-        }
-    );
-
-    Loop::addTimer($timeout, function () {
-        Loop::stop();
-    });
-
-    Loop::run();
-
-    if ($rejected) {
-        throw $error;
-    }
-
-    return $result;
-}
 
 it('resolves with the child result when the callable succeeds', function () {
     $manager = new AsyncProcessManager;
