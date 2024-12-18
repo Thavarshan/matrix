@@ -42,15 +42,12 @@ class AsyncPromise
     /**
      * Adds a rejection handler to the promise and returns $this for chaining.
      *
-     * The catch() method is analogous to otherwise() in ReactPHP promises.
-     *
      * @param  callable  $onRejected  The callback to execute if the promise rejects.
      * @return $this
      */
     public function catch(callable $onRejected): self
     {
-        // ReactPHP doesn't have a catch() method, but otherwise() attaches an error handler.
-        $this->promise = $this->promise->otherwise($onRejected);
+        $this->promise = $this->promise->catch($onRejected);
 
         return $this;
     }
