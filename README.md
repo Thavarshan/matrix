@@ -12,7 +12,7 @@
 Matrix’s `async()` helper returns a promise-like object (thanks to `AsyncPromise`) which provides familiar `then()` and `catch()` methods, making asynchronous tasks feel as natural as JavaScript promises.
 
 ---
-
+    
 ## **Why Matrix?**
 
 Matrix aims to simplify parallel execution of potentially long-running or CPU-intensive operations in PHP. Instead of waiting for each task to complete sequentially, you can spawn child processes, run tasks concurrently, and handle their results asynchronously.
@@ -30,7 +30,7 @@ Matrix aims to simplify parallel execution of potentially long-running or CPU-in
 - **Easy integration with existing code**: Just wrap your function calls with `async()` and chain handlers as needed.
 
 ---
-
+    
 ## **Installation**
 
 Install Matrix via Composer:
@@ -47,7 +47,48 @@ Ensure the following PHP extensions are enabled:
 Matrix also relies on ReactPHP promises and event loop, installed automatically via Composer.
 
 ---
+    
+## ⚠️ **Important Notice: Avoid Using `pcntl_fork()` in Web Server Environments**
 
+**Matrix PHP** leverages `pcntl_fork()` to achieve asynchronous, parallel task execution. However, it's crucial to understand the limitations and best practices when deploying Matrix PHP, especially concerning the use of `pcntl_fork()` within different server environments.
+
+### 🚫 **Why Avoid `pcntl_fork()` in Web Servers?**
+
+- **PHP Thread Safety:**  
+  PHP is **not inherently thread-safe**. Utilizing `pcntl_fork()` within a multi-threaded web server environment, such as Apache configured with the **Worker MPM**, can lead to unpredictable behavior, resource leaks, and potential server instability.
+
+- **Apache Worker MPM Issues:**  
+  Running PHP as a module in an Apache installation configured with the **Worker MPM** is **not recommended**. The **Worker MPM** uses multiple threads to handle requests, which conflicts with PHP's thread safety limitations.
+
+### ✅ **Recommended Setup**
+
+- **Use Prefork MPM with Apache:**  
+  For a stable and compatible environment, it's advised to configure Apache with the **Prefork MPM** module when integrating with PHP. The **Prefork MPM** handles each request in a separate process rather than threads, aligning with PHP's operational model and avoiding thread safety issues.
+
+  **References:**
+  - [PHP Manual: Installing PHP on Unix systems with Apache](http://php.net/install.unix.apache2.php)
+  - [Steve Kallestad's Guide on Apache Worker MPM with PHP](http://www.stevekallestad.com/blog/apache_worker_mpm_with_php.html)
+
+### 🔧 **Best Practices**
+
+- **Command-Line and Background Processes:**  
+  Matrix PHP is best suited for **command-line interfaces (CLI)**, background workers, or daemonized applications where process forking is safe and manageable.
+
+- **Web Applications:**  
+  For web-based deployments, prefer using **event-driven asynchronous models** provided by libraries like **ReactPHP**, which do not rely on process forking and are more compatible with typical web server configurations.
+
+### 🛡️ **Conclusion**
+
+To ensure the stability, performance, and reliability of your PHP applications using **Matrix PHP**, adhere to the following guidelines:
+
+1. **Avoid using `pcntl_fork()` in web server contexts**, especially with multi-threaded server modules like Apache's Worker MPM.
+2. **Configure Apache with Prefork MPM** when integrating with PHP to prevent thread safety issues.
+3. **Leverage event-driven asynchronous approaches** (e.g., ReactPHP) for web applications to achieve concurrency without the complexities of process forking.
+
+By following these best practices, you can harness the full potential of **Matrix PHP** while maintaining a robust and stable server environment.
+
+---
+    
 ## **Asynchronous API Inspired by JavaScript**
 
 Matrix provides a helper called `async()` that returns an `AsyncPromise`, mimicking JavaScript’s promise usage.
@@ -81,7 +122,7 @@ async(fn () => throw new RuntimeException('Something went wrong'))
 ```
 
 ---
-
+    
 ## **Under the Hood**
 
 - **Forked Processes**: Calling `async()` triggers `AsyncProcessManager::fork()`, which spawns a new child process. This child executes your given callable in isolation.
@@ -90,7 +131,7 @@ async(fn () => throw new RuntimeException('Something went wrong'))
 - **Promises**: The `AsyncPromise` class wraps React’s `PromiseInterface` to provide a `.then()` and `.catch()` interface, making asynchronous code more intuitive.
 
 ---
-
+    
 ## **Examples**
 
 **Running Multiple Tasks in Parallel:**
@@ -120,7 +161,7 @@ async(fn() => 21)
 ```
 
 ---
-
+    
 ## **Testing and Integration**
 
 You can write integration tests to confirm asynchronous behavior. For example, test that two half-second tasks complete in ~0.5s total, ensuring concurrency works as intended:
@@ -148,7 +189,7 @@ it('runs tasks concurrently', function () {
 *(`awaitPromise()` is a helper test function that runs the event loop until the given promise resolves.)*
 
 ---
-
+    
 ## **Common Issues and Troubleshooting**
 
 - **Sequential Execution Instead of Parallel**:
@@ -161,7 +202,7 @@ it('runs tasks concurrently', function () {
   If the child throws an unknown exception type not autoloaded in the parent, it defaults to `RuntimeException`. Basic details (message, file, line, trace) are preserved.
 
 ---
-
+    
 ## **API Reference**
 
 ### Global `async()` function
@@ -185,7 +226,7 @@ function async(callable $callable): AsyncPromise
   Attaches an error handler (alias to React’s `otherwise()`).
 
 ---
-
+    
 ## **Contributing**
 
 We welcome contributions. To contribute:
@@ -197,13 +238,13 @@ We welcome contributions. To contribute:
 5. Open a pull request against `main`.
 
 ---
-
+    
 ## **License**
 
 Matrix is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more information.
 
 ---
-
+    
 ## **Authors**
 
 - **[Jerome Thayananthajothy]** - *Initial Work* - [Thavarshan](https://github.com/Thavarshan)
