@@ -1,6 +1,12 @@
 # Release Notes
 
-## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.0.0...HEAD)
+## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.0.1...HEAD)
+
+## [v3.0.1](https://github.com/Thavarshan/matrix/compare/v3.0.0...v3.0.1) - 2024-12-18
+
+### Changed
+
+- Refactored `catch` method in `AsyncPromise` class to use React PHP's `catch` method instead of `otherwise` method as it is deprecated.
 
 ## [v3.0.0](https://github.com/Thavarshan/matrix/compare/v2.0.0...v3.0.0) - 2024-12-16
 
