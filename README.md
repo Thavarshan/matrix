@@ -7,246 +7,118 @@
 [![Check & fix styling](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml/badge.svg)](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
 
-**Matrix** is a PHP library that brings asynchronous, non-blocking task execution to PHP. Inspired by the JavaScript `async`/`await` pattern, Matrix leverages `pcntl_fork()` and ReactPHP promises to run tasks in parallel child processes. The result is a clean, promise-based API enabling concurrency without blocking your main code.
+Matrix is a PHP library that provides asynchronous, non-blocking functionality inspired by JavaScript's `async`/`await` syntax. With Matrix, you can handle asynchronous tasks and manage concurrency in PHP using promises and a familiar, intuitive API.
 
-Matrix’s `async()` helper returns a promise-like object (thanks to `AsyncPromise`) which provides familiar `then()` and `catch()` methods, making asynchronous tasks feel as natural as JavaScript promises.
+## Why Matrix?
 
----
-    
-## **Why Matrix?**
+Matrix simplifies the execution of asynchronous tasks in PHP by combining promises with ReactPHP's event loop. It allows for non-blocking execution, error propagation, and easy integration with existing PHP projects.
 
-Matrix aims to simplify parallel execution of potentially long-running or CPU-intensive operations in PHP. Instead of waiting for each task to complete sequentially, you can spawn child processes, run tasks concurrently, and handle their results asynchronously.
+### Key Features
 
-- **JavaScript-like async API**: The `async()` function returns promise-like objects with `then()` and `catch()`.
-- **Built on `pcntl_fork()` and ReactPHP**: Achieves true parallelism by using multiple processes, integrated with React’s event loop for non-blocking IO.
-- **Error Propagation**: Exceptions thrown in child processes are serialized and rethrown as exceptions in the parent, simplifying error handling.
-- **Non-blocking Concurrency**: Your main code continues running while tasks proceed in parallel, improving efficiency for CPU-bound or blocking tasks.
+- **JavaScript-like API**: Use `async()` and `await()` for straightforward asynchronous programming.
+- **Built with ReactPHP**: Ensures non-blocking execution using ReactPHP's event loop.
+- **Error Handling**: Catch and handle exceptions seamlessly with `.catch()` or `try-catch`.
+- **Automatic Loop Management**: The event loop runs automatically to handle promise resolution.
 
-### **Key Features**
+## Installation
 
-- **Familiar `then()` and `catch()` interface** for handling asynchronous results.
-- **Parallel execution via processes**: Offload heavy tasks to separate child processes.
-- **Automatic error forwarding**: Rethrow child exceptions in the parent for consistent error handling.
-- **Easy integration with existing code**: Just wrap your function calls with `async()` and chain handlers as needed.
-
----
-    
-## **Installation**
-
-Install Matrix via Composer:
+Install via Composer:
 
 ```bash
 composer require jerome/matrix
 ```
 
-Ensure the following PHP extensions are enabled:
+Ensure the following extensions are enabled:
 
-- `pcntl`
 - `sockets`
 
-Matrix also relies on ReactPHP promises and event loop, installed automatically via Composer.
+Matrix relies on ReactPHP promises and event loop, which are installed automatically via Composer.
 
----
-    
-## ⚠️ **Important Notice: Avoid Using `pcntl_fork()` in Web Server Environments**
+## API Overview
 
-**Matrix PHP** leverages `pcntl_fork()` to achieve asynchronous, parallel task execution. However, it's crucial to understand the limitations and best practices when deploying Matrix PHP, especially concerning the use of `pcntl_fork()` within different server environments.
+### `async(callable $callable): PromiseInterface`
 
-### 🚫 **Why Avoid `pcntl_fork()` in Web Servers?**
+Wraps a callable into an asynchronous function that returns a promise.
 
-- **PHP Thread Safety:**  
-  PHP is **not inherently thread-safe**. Utilizing `pcntl_fork()` within a multi-threaded web server environment, such as Apache configured with the **Worker MPM**, can lead to unpredictable behavior, resource leaks, and potential server instability.
-
-- **Apache Worker MPM Issues:**  
-  Running PHP as a module in an Apache installation configured with the **Worker MPM** is **not recommended**. The **Worker MPM** uses multiple threads to handle requests, which conflicts with PHP's thread safety limitations.
-
-### ✅ **Recommended Setup**
-
-- **Use Prefork MPM with Apache:**  
-  For a stable and compatible environment, it's advised to configure Apache with the **Prefork MPM** module when integrating with PHP. The **Prefork MPM** handles each request in a separate process rather than threads, aligning with PHP's operational model and avoiding thread safety issues.
-
-  **References:**
-  - [PHP Manual: Installing PHP on Unix systems with Apache](http://php.net/install.unix.apache2.php)
-  - [Steve Kallestad's Guide on Apache Worker MPM with PHP](http://www.stevekallestad.com/blog/apache_worker_mpm_with_php.html)
-
-### 🔧 **Best Practices**
-
-- **Command-Line and Background Processes:**  
-  Matrix PHP is best suited for **command-line interfaces (CLI)**, background workers, or daemonized applications where process forking is safe and manageable.
-
-- **Web Applications:**  
-  For web-based deployments, prefer using **event-driven asynchronous models** provided by libraries like **ReactPHP**, which do not rely on process forking and are more compatible with typical web server configurations.
-
-### 🛡️ **Conclusion**
-
-To ensure the stability, performance, and reliability of your PHP applications using **Matrix PHP**, adhere to the following guidelines:
-
-1. **Avoid using `pcntl_fork()` in web server contexts**, especially with multi-threaded server modules like Apache's Worker MPM.
-2. **Configure Apache with Prefork MPM** when integrating with PHP to prevent thread safety issues.
-3. **Leverage event-driven asynchronous approaches** (e.g., ReactPHP) for web applications to achieve concurrency without the complexities of process forking.
-
-By following these best practices, you can harness the full potential of **Matrix PHP** while maintaining a robust and stable server environment.
-
----
-    
-## **Asynchronous API Inspired by JavaScript**
-
-Matrix provides a helper called `async()` that returns an `AsyncPromise`, mimicking JavaScript’s promise usage.
-
-**Example:**
+Example:
 
 ```php
 use function async;
 
-async(fn () => 'Task result')
-    ->then(fn($result) => print($result . PHP_EOL))
-    ->catch(fn($e) => print("Error: " . $e->getMessage()));
+$func = async(fn () => 'Success');
+
+$func->then(fn ($value) => echo $value) // Outputs: Success
+    ->catch(fn ($e) => echo 'Error: ' . $e->getMessage());
 ```
 
-**What happens here?**
+### `await(PromiseInterface $promise): mixed`
 
-- `async()` forks a new child process using `AsyncProcessManager`.
-- The child runs your callable and serializes the result or error.
-- The parent listens on a socket via ReactPHP’s event loop.
-- When the child finishes, the parent promise is resolved or rejected.
-- The `AsyncPromise` provides a `.then()` for success and `.catch()` for errors, similar to JS promises.
+Awaits the resolution of a promise and returns its value.
 
-### **Error Handling**
-
-If the child task throws an exception, `catch()` handles it gracefully:
+Example:
 
 ```php
-async(fn () => throw new RuntimeException('Something went wrong'))
-    ->then(fn($res) => print("Not called"))
-    ->catch(fn($e) => print("Caught error: " . $e->getMessage() . PHP_EOL));
+use function await;
+
+try {
+    $result = await(async(fn () => 'Success'));
+    echo $result; // Outputs: Success
+} catch (\Throwable $e) {
+    echo 'Error: ' . $e->getMessage();
+}
 ```
 
----
-    
-## **Under the Hood**
+## Examples
 
-- **Forked Processes**: Calling `async()` triggers `AsyncProcessManager::fork()`, which spawns a new child process. This child executes your given callable in isolation.
-- **IPC (Inter-Process Communication)**: Results or errors are serialized and sent back to the parent via a socket pair, using `stream_socket_pair()`.
-- **ReactPHP Integration**: The parent uses `React\EventLoop` to add a read stream listener. This ensures your code never blocks, waiting for the child process’s response asynchronously.
-- **Promises**: The `AsyncPromise` class wraps React’s `PromiseInterface` to provide a `.then()` and `.catch()` interface, making asynchronous code more intuitive.
-
----
-    
-## **Examples**
-
-**Running Multiple Tasks in Parallel:**
+### Running Asynchronous Tasks
 
 ```php
-async(function () {
-    usleep(500000); // Simulate half-second work
-    return "Task A done";
-})->then(fn($res) => print("$res\n"));
+$promise = async(fn () => 'Task Completed');
 
-async(function () {
-    usleep(500000); // Another half-second task
-    return "Task B done";
-})->then(fn($res) => print("$res\n"));
-
-// Both tasks start around the same time, taking ~0.5s total if concurrent, rather than ~1s if sequential.
+$promise->then(fn ($value) => echo $value) // Outputs: Task Completed
+    ->catch(fn ($e) => echo 'Error: ' . $e->getMessage());
 ```
 
-**Transforming Results with Thenable Chain:**
+### Await Syntax
 
 ```php
-async(fn() => 21)
-    ->then(fn($val) => $val * 2)            // 42
-    ->then(fn($val) => "The answer is $val") // "The answer is 42"
-    ->then(fn($str) => print($str . PHP_EOL))
-    ->catch(fn($e) => print("Error: " . $e->getMessage()));
+try {
+    $result = await(async(fn () => 'Finished Task'));
+    echo $result; // Outputs: Finished Task
+} catch (\Throwable $e) {
+    echo 'Error: ' . $e->getMessage();
+}
 ```
 
----
-    
-## **Testing and Integration**
-
-You can write integration tests to confirm asynchronous behavior. For example, test that two half-second tasks complete in ~0.5s total, ensuring concurrency works as intended:
+### Handling Errors
 
 ```php
-it('runs tasks concurrently', function () {
-    $start = microtime(true);
+$promise = async(fn () => throw new \RuntimeException('Task Failed'));
 
-    $p1 = async(fn() => (usleep(500000), 'Done A'));
-    $p2 = async(fn() => (usleep(500000), 'Done B'));
-
-    $bothDone = React\Promise\all([
-        $p1->then(fn($r) => $r),
-        $p2->then(fn($r) => $r),
-    ]);
-
-    $results = awaitPromise($bothDone);
-    $elapsed = microtime(true) - $start;
-
-    expect($results)->toEqual(['Done A', 'Done B']);
-    expect($elapsed)->toBeLessThan(1.0); // Confirms concurrency
-});
+$promise->then(fn ($value) => echo $value)
+    ->catch(fn ($e) => echo 'Caught Error: ' . $e->getMessage()); // Outputs: Caught Error: Task Failed
 ```
 
-*(`awaitPromise()` is a helper test function that runs the event loop until the given promise resolves.)*
+## How It Works
+
+1. **Event Loop Management**: The `async()` function ensures the event loop runs until the promise is resolved or rejected.
+2. **Promise Interface**: Promises provide `then` and `catch` for handling success and errors.
+3. **Synchronous Await**: The `await()` function allows synchronous-style code for promise resolution.
 
 ---
-    
-## **Common Issues and Troubleshooting**
 
-- **Sequential Execution Instead of Parallel**:
-  Ensure `pcntl` and `sockets` extensions are enabled. Also, ensure you are not blocking the main thread. The event loop must run for asynchronous behavior.
+## Testing
 
-- **No Interleaved Output**:
-  Console output might be buffered. If you rely on interleaving stdout, consider using `fflush(STDOUT)` in the child, or rely on timing tests to confirm concurrency.
+Run the tests to ensure everything is working as expected:
 
-- **Exception Types**:
-  If the child throws an unknown exception type not autoloaded in the parent, it defaults to `RuntimeException`. Basic details (message, file, line, trace) are preserved.
-
----
-    
-## **API Reference**
-
-### Global `async()` function
-
-```php
-function async(callable $callable): AsyncPromise
+```bash
+composer test
 ```
 
-- Accepts a callable to run asynchronously.
-- Returns `AsyncPromise`, providing `.then()` and `.catch()`.
+## Contributing
 
-### `Matrix\AsyncProcessManager`
+Contributions are welcome! Fork the repository and create a pull request.
 
-- `fork(callable $callable)`: Forks a child process to run the callable. Returns a `React\Promise\PromiseInterface`.
+## License
 
-### `Matrix\AsyncPromise`
-
-- `then(callable $onFulfilled): self`
-  Attaches a success handler.
-- `catch(callable $onRejected): self`
-  Attaches an error handler (alias to React’s `otherwise()`).
-
----
-    
-## **Contributing**
-
-We welcome contributions. To contribute:
-
-1. Fork the repository.
-2. Create a new feature branch (`git checkout -b feature/my-feature`).
-3. Commit your changes (`git commit -m 'Add new feature'`).
-4. Push to the branch (`git push origin feature/my-feature`).
-5. Open a pull request against `main`.
-
----
-    
-## **License**
-
-Matrix is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more information.
-
----
-    
-## **Authors**
-
-- **[Jerome Thayananthajothy]** - *Initial Work* - [Thavarshan](https://github.com/Thavarshan)
-
-See the [contributors](https://github.com/Thavarshan/matrix/contributors) who participated in this project.
+Matrix is licensed under the MIT License.

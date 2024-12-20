@@ -1,7 +1,7 @@
 {
     "name": "jerome/matrix",
     "description": "An unparalleled PHP asynchronous experience, offering genuine concurrency and fiber-based task management.",
-    "version": "3.0.1",
+    "version": "3.1.0",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -35,11 +35,8 @@
         "symfony/var-dumper": "^7.2"
     },
     "autoload": {
-        "psr-4": {
-            "Matrix\\": "src/Matrix/"
-        },
         "files": [
-            "src/Matrix/async.php"
+            "src/functions.php"
         ]
     },
     "autoload-dev": {
@@ -50,7 +47,8 @@
     "scripts": {
         "analyse": "chmod +x bin/analysis.sh && ./bin/analysis.sh",
         "lint": "chmod +x bin/lint.sh && ./bin/lint.sh",
-        "fix": "chmod +x bin/fix.sh && ./bin/fix.sh"
+        "fix": "chmod +x bin/fix.sh && ./bin/fix.sh",
+        "test": "vendor/bin/pest"
     },
     "config": {
         "sort-packages": true,
