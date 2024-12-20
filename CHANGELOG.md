@@ -1,6 +1,36 @@
 # Release Notes
 
-## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.0.1...HEAD)
+## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.1.0...HEAD)
+
+## [v3.1.0](https://github.com/Thavarshan/matrix/compare/v3.0.1...v3.1.0) - 2024-12-20
+
+### Added
+
+- **Enhanced `async()` and `await()` Functions**:
+  - Automatically manage the ReactPHP event loop, removing the need for manual `getLoop()->run()` calls in most scenarios.
+  - Added improved handling of promise resolution and rejection, ensuring consistent results in asynchronous workflows.
+  
+
+### Changed
+
+- **Simplified Code Structure**:
+  - Removed reliance on `pcntl_fork()` for child process management, enabling better compatibility with web server environments.
+  - Improved API consistency for seamless integration in both CLI and web-based applications.
+  
+
+### Removed
+
+- **Deprecated Fork-Based Concurrency**:
+  - Eliminated the usage of `pcntl_fork()` to support non-blocking asynchronous operations without requiring process forking.
+  - Streamlined error handling and promise lifecycle management by adopting a purely ReactPHP-based approach.
+  
+
+### Fixed
+
+- **Web Compatibility**:
+  - Resolved issues that previously caused incompatibility with multi-threaded web server configurations like Apache's Worker MPM.
+  - Ensured that asynchronous tasks can now execute reliably in web contexts.
+  
 
 ## [v3.0.1](https://github.com/Thavarshan/matrix/compare/v3.0.0...v3.0.1) - 2024-12-18
 
