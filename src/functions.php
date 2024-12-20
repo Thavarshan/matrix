@@ -12,6 +12,7 @@ use React\Promise\PromiseInterface;
 function getLoop(): object
 {
     static $loop = null;
+
     if ($loop === null) {
         $loop = Loop::get();
     }

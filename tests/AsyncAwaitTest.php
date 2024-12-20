@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 it('supports chaining then and catch syntax', function () {
     $func = async(fn () => 'Success');
 
@@ -25,7 +27,7 @@ it('supports await syntax for promise resolution', function () {
 
         expect($result)->toBe('Success');
     } catch (\Throwable $th) {
-        $this->fail('Await threw an unexpected exception: '.$th->getMessage());
+        $this->fail('Await threw an unexpected exception: ' . $th->getMessage());
     }
 });
 
