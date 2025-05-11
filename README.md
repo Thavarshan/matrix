@@ -1,4 +1,4 @@
-[![Matrix](./assets/Banner.jpg)](https://github.com/Thavarshan/matrix)
+[![Matrix](./assets/Banner.png)](https://github.com/Thavarshan/matrix)
 
 # Matrix
 
