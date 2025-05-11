@@ -1,6 +1,43 @@
 # Release Notes
 
-## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.2.0...HEAD)
+## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.3.0...HEAD)
+
+## [v3.3.0](https://github.com/Thavarshan/matrix/compare/v3.2.0...v3.3.0) - 2025-05-11
+
+### Added
+
+- Rate limiting functionality via `rateLimit()` to manage API and resource access
+- Promise cancellation support with `cancellable()` and cleanup callbacks
+- Batch processing capability with the `batch()` function for improved performance
+- Retry mechanism with configurable backoff strategies using `retry()`
+- Error context enhancement via `withErrorContext()` for better debugging
+- Waterfall promise chaining with `waterfall()` for sequential operations
+- Comprehensive integration tests covering real-world usage scenarios
+- Advanced error handling with specialized exception classes (`TimeoutException`, `RetryException`, `AsyncException`)
+- Support for progress tracking in concurrent operations (`map()`, `pool()`)
+- Promise pooling with `pool()` for executing multiple callables with concurrency limits
+- Detailed API documentation with examples for all functions
+- JIRA integration example showing complex asynchronous workflows
+- Database operations example demonstrating concurrent queries
+
+### Changed
+
+- Improved test suite to avoid timing-dependent assertions
+- Enhanced `timeout()` implementation for more reliable operation
+- Refactored `map()` to better handle unlimited concurrency (0 value)
+- Optimized event loop management for improved performance
+- Updated the README with comprehensive API documentation and examples
+- Reorganized code structure for better maintainability
+
+### Fixed
+
+- Fixed unstable tests by removing timing-dependent assertions
+- Improved error propagation in nested promises
+- Enhanced promise resolution to prevent memory leaks
+- Fixed concurrency control in `map()` and `batch()` functions
+- Addressed potential issues with event loop management in `await()`
+- Improved error handling in `retry()` to properly collect and report failures
+- Fixed progress tracking in concurrent operations
 
 ## [v3.2.0](https://github.com/Thavarshan/matrix/compare/v3.1.0...v3.2.0) - 2025-05-03
 
@@ -10,6 +47,7 @@
   - `all(array $promises)`: Run multiple promises concurrently and get an array of results.
   - `race(array $promises)`: Get the result of the first promise that resolves.
   - `any(array $promises)`: Get the result of the first promise that succeeds.
+  
 
 ### Changed
 
@@ -17,6 +55,7 @@
   - Added proper return type `LoopInterface` to `getLoop()` function.
   - Enhanced documentation with more detailed parameter and return type descriptions.
   - Included examples of various usage patterns in function documentation.
+  
 
 ### Fixed
 
@@ -24,6 +63,7 @@
   - Removed premature `getLoop()->stop()` calls in the `async()` function.
   - Added resolution flag in `await()` to prevent running the event loop if a promise is already resolved.
   - Fixed potential issues with multiple concurrent promises by allowing the event loop to continue running when needed.
+  
 
 ## [v3.1.0](https://github.com/Thavarshan/matrix/compare/v3.0.1...v3.1.0) - 2024-12-20
 
@@ -32,24 +72,28 @@
 - **Enhanced `async()` and `await()` Functions**:
   - Automatically manage the ReactPHP event loop, removing the need for manual `getLoop()->run()` calls in most scenarios.
   - Added improved handling of promise resolution and rejection, ensuring consistent results in asynchronous workflows.
+  
 
 ### Changed
 
 - **Simplified Code Structure**:
   - Removed reliance on `pcntl_fork()` for child process management, enabling better compatibility with web server environments.
   - Improved API consistency for seamless integration in both CLI and web-based applications.
+  
 
 ### Removed
 
 - **Deprecated Fork-Based Concurrency**:
   - Eliminated the usage of `pcntl_fork()` to support non-blocking asynchronous operations without requiring process forking.
   - Streamlined error handling and promise lifecycle management by adopting a purely ReactPHP-based approach.
+  
 
 ### Fixed
 
 - **Web Compatibility**:
   - Resolved issues that previously caused incompatibility with multi-threaded web server configurations like Apache's Worker MPM.
   - Ensured that asynchronous tasks can now execute reliably in web contexts.
+  
 
 ## [v3.0.1](https://github.com/Thavarshan/matrix/compare/v3.0.0...v3.0.1) - 2024-12-18
 
@@ -89,7 +133,7 @@
 
 - Dropped support for PHP 8.2
 
-**Full Changelog**: <https://github.com/Thavarshan/matrix/compare/1.0.1...2.0.0>
+**Full Changelog**: [https://github.com/Thavarshan/matrix/compare/1.0.1...2.0.0](https://github.com/Thavarshan/matrix/compare/1.0.1...2.0.0)
 
 ## [v1.0.1](https://github.com/Thavarshan/matrix/compare/v1.0.0...v1.0.1) - 2024-10-19
 
