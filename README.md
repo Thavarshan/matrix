@@ -3,9 +3,14 @@
 # Matrix
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
-[![Tests](https://github.com/Thavarshan/matrix/actions/workflows/run-tests.yml/badge.svg?label=tests&branch=main)](https://github.com/Thavarshan/matrix/actions/workflows/run-tests.yml)
-[![Check & Fix Styling](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml/badge.svg)](https://github.com/Thavarshan/matrix/actions/workflows/laravel-pint.yml)
+[![Tests](https://github.com/Thavarshan/matrix/actions/workflows/tests.yml/badge.svg?label=tests&branch=main)](https://github.com/Thavarshan/matrix/actions/workflows/tests.yml)
+[![Lint](https://github.com/Thavarshan/matrix/actions/workflows/lint.yml/badge.svg)](https://github.com/Thavarshan/matrix/actions/workflows/lint.yml)
+[![CodeQL](https://github.com/Thavarshan/matrix/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/Thavarshan/matrix/actions/workflows/github-code-scanning/codeql)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%20max-brightgreen.svg)](https://phpstan.org/)
+[![PHP Version](https://img.shields.io/packagist/php-v/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
+[![License](https://img.shields.io/packagist/l/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
 [![Total Downloads](https://img.shields.io/packagist/dt/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
+[![GitHub Stars](https://img.shields.io/github/stars/Thavarshan/matrix.svg?style=social&label=Stars)](https://github.com/Thavarshan/matrix/stargazers)
 
 Matrix is a PHP library that brings asynchronous, non-blocking functionality to PHP, inspired by JavaScript's `async`/`await` syntax. With Matrix, you can handle asynchronous tasks and manage concurrency using promises and a simple, intuitive API.
 
