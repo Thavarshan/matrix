@@ -12,24 +12,35 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/jerome/matrix.svg)](https://packagist.org/packages/jerome/matrix)
 [![GitHub Stars](https://img.shields.io/github/stars/Thavarshan/matrix.svg?style=social&label=Stars)](https://github.com/Thavarshan/matrix/stargazers)
 
-Matrix is a PHP library that brings asynchronous, non-blocking functionality to PHP, inspired by JavaScript's `async`/`await` syntax. With Matrix, you can handle asynchronous tasks and manage concurrency using promises and a simple, intuitive API.
+Matrix is a PHP library that brings event-driven, asynchronous programming to PHP, inspired by JavaScript's `async`/`await` syntax. Built on top of ReactPHP's event loop, Matrix makes it easier to write non-blocking I/O operations and manage concurrency with a simple, intuitive API.
+
+## Understanding Async in PHP
+
+**Important**: PHP runs in a single-threaded environment. Matrix doesn't create true parallelism but enables **event-driven, non-blocking I/O operations** through ReactPHP's event loop. This means:
+
+- ✅ **Non-blocking I/O**: Network requests, file operations, and timers don't block execution
+- ✅ **Concurrent operations**: Multiple I/O operations can run simultaneously
+- ❌ **CPU-bound tasks**: Heavy computations will still block the event loop
+- ❌ **True parallelism**: No multiple threads or processes
+
+Matrix shines when dealing with I/O-heavy applications like API clients, web scrapers, or microservices.
 
 ## Why Choose Matrix?
 
-Matrix simplifies asynchronous programming in PHP by combining promises with ReactPHP's event loop. It supports non-blocking execution, seamless error handling, and easy integration with existing projects.
+Matrix simplifies ReactPHP development by providing a familiar async/await syntax while maintaining full compatibility with ReactPHP's ecosystem. It handles the complexity of promise management and event loop integration behind a clean, intuitive API.
 
 ### Key Features
 
-- **JavaScript-like API**: Use `async()` and `await()` for straightforward asynchronous programming.
-- **Powered by ReactPHP**: Ensures non-blocking execution using ReactPHP's event loop.
-- **Robust Error Handling**: Catch and handle exceptions with `.catch()` or `try-catch`.
-- **Automatic Loop Management**: The event loop runs automatically to handle promise resolution.
-- **Concurrent Operations**: Run multiple asynchronous tasks in parallel.
-- **Rate Limiting**: Control the frequency of asynchronous operations.
-- **Promise Cancellation**: Cancel pending operations when they're no longer needed.
-- **Retry Mechanism**: Automatically retry failed operations with configurable backoff strategies.
-- **Batch Processing**: Process items in batches for improved performance.
-- **Enhanced Error Handling**: Add context to errors for better debugging.
+- **JavaScript-like API**: Use `async()` and `await()` for straightforward asynchronous programming
+- **Powered by ReactPHP**: Built on ReactPHP's battle-tested event loop for true non-blocking I/O
+- **Robust Error Handling**: Catch and handle exceptions with `.catch()` or `try-catch`
+- **Automatic Loop Management**: The event loop runs automatically to handle promise resolution
+- **Concurrent Operations**: Run multiple I/O operations simultaneously
+- **Rate Limiting**: Control the frequency of asynchronous operations
+- **Promise Cancellation**: Cancel pending operations when they're no longer needed
+- **Retry Mechanism**: Automatically retry failed operations with configurable backoff strategies
+- **Batch Processing**: Process items in batches for improved performance
+- **Enhanced Error Handling**: Add context to errors for better debugging
 
 ## Installation
 
@@ -143,16 +154,21 @@ Maps an array of items through an async function with optional concurrency contr
 
 ```php
 use function Matrix\{async, await, map};
+use React\Http\Browser;
 
 $urls = ['https://example.com', 'https://example.org', 'https://example.net'];
+$browser = new Browser();
 
 $results = await(map(
     $urls,
-    function ($url) {
-        // Fetch the URL contents asynchronously
-        return async(function () use ($url) {
-            $contents = file_get_contents($url);
-            return strlen($contents);
+    function ($url) use ($browser) {
+        // Non-blocking HTTP request
+        return $browser->get($url)->then(function ($response) use ($url) {
+            return [
+                'url' => $url,
+                'status' => $response->getStatusCode(),
+                'size' => strlen($response->getBody())
+            ];
         });
     },
     2, // Process 2 URLs at a time
@@ -161,7 +177,7 @@ $results = await(map(
     }
 ));
 
-print_r($results); // Array of content lengths
+print_r($results); // Array of response data
 ```
 
 #### `batch(array $items, callable $batchCallback, int $batchSize = 10, int $concurrency = 1): PromiseInterface`
@@ -243,17 +259,21 @@ Retries a promise-returning function multiple times until success or max attempt
 
 ```php
 use function Matrix\{async, await, retry};
+use React\Http\Browser;
+
+$browser = new Browser();
 
 try {
     $result = await(retry(
-        function () {
-            return async(function () {
-                // Simulate an operation that sometimes fails
-                if (rand(1, 3) === 1) {
-                    return 'Success';
-                }
-                throw new \RuntimeException('Failed');
-            });
+        function () use ($browser) {
+            // Non-blocking HTTP request with potential for failure
+            return $browser->get('https://unreliable-api.com/data')
+                ->then(function ($response) {
+                    if ($response->getStatusCode() !== 200) {
+                        throw new \RuntimeException('API returned ' . $response->getStatusCode());
+                    }
+                    return $response->getBody()->getContents();
+                });
         },
         5, // Try up to 5 times
         function ($attempt, $error) {
@@ -389,13 +409,15 @@ Creates a rate-limited version of an async function.
 
 ```php
 use function Matrix\{async, await, rateLimit};
+use React\Http\Browser;
+
+$browser = new Browser();
 
 // Create a function that's limited to 2 calls per second
 $limitedFetch = rateLimit(
-    function ($url) {
-        return async(function () use ($url) {
-            return file_get_contents($url);
-        });
+    function ($url) use ($browser) {
+        // Non-blocking HTTP request
+        return $browser->get($url);
     },
     2,  // Maximum 2 calls
     1.0 // Per 1 second
@@ -413,12 +435,12 @@ $urls = [
 // These will automatically be rate-limited
 foreach ($urls as $url) {
     $limitedFetch($url)->then(function ($response) use ($url) {
-        echo "Fetched $url: " . strlen($response) . " bytes\n";
+        echo "Fetched $url: HTTP " . $response->getStatusCode() . "\n";
     });
 }
 
 // Wait for all to complete
-await(\Matrix\Async::delay(10)); // Give time for requests to complete
+await(delay(10)); // Give time for requests to complete
 ```
 
 ## Examples
@@ -468,12 +490,14 @@ $promise = async(fn () => 'First Operation')
 await($promise); // Wait for all operations to complete
 ```
 
-### HTTP Requests Example
+### Non-blocking HTTP Requests Example
 
 ```php
 use function Matrix\{async, await, map};
+use React\Http\Browser;
 
-// Fetch multiple URLs concurrently
+// Fetch multiple URLs concurrently using non-blocking requests
+$browser = new Browser();
 $urls = [
     'https://example.com',
     'https://example.org',
@@ -482,15 +506,17 @@ $urls = [
 
 $results = await(map(
     $urls,
-    function ($url) {
-        return async(function () use ($url) {
-            $start = microtime(true);
-            $contents = file_get_contents($url);
+    function ($url) use ($browser) {
+        $start = microtime(true);
+
+        // Non-blocking HTTP request
+        return $browser->get($url)->then(function ($response) use ($url, $start) {
             $duration = microtime(true) - $start;
 
             return [
                 'url' => $url,
-                'size' => strlen($contents),
+                'status' => $response->getStatusCode(),
+                'size' => strlen($response->getBody()),
                 'time' => round($duration, 2) . 's'
             ];
         });
@@ -501,35 +527,35 @@ $results = await(map(
 // Display results
 foreach ($results as $result) {
     echo "URL: {$result['url']}\n";
+    echo "Status: {$result['status']}\n";
     echo "Size: {$result['size']} bytes\n";
     echo "Time: {$result['time']}\n\n";
 }
 ```
 
-### Database Operations Example
+### Database Operations Example (using ReactPHP MySQL)
 
 ```php
 use function Matrix\{async, await, pool};
+use React\MySQL\Factory;
+use React\MySQL\QueryResult;
 
-// Define database operations as asynchronous tasks
+// Define database operations as non-blocking tasks
+$factory = new Factory();
+$connection = $factory->createLazyConnection('user:pass@localhost/test');
+
 $tasks = [
-    function () {
-        return async(function () {
-            $db = new PDO('mysql:host=localhost;dbname=test', 'user', 'password');
-            return $db->query('SELECT * FROM users LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
-        });
+    function () use ($connection) {
+        return $connection->query('SELECT * FROM users LIMIT 10')
+            ->then(fn (QueryResult $result) => $result->resultRows);
     },
-    function () {
-        return async(function () {
-            $db = new PDO('mysql:host=localhost;dbname=test', 'user', 'password');
-            return $db->query('SELECT * FROM products LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
-        });
+    function () use ($connection) {
+        return $connection->query('SELECT * FROM products LIMIT 10')
+            ->then(fn (QueryResult $result) => $result->resultRows);
     },
-    function () {
-        return async(function () {
-            $db = new PDO('mysql:host=localhost;dbname=test', 'user', 'password');
-            return $db->query('SELECT * FROM orders LIMIT 10')->fetchAll(PDO::FETCH_ASSOC);
-        });
+    function () use ($connection) {
+        return $connection->query('SELECT * FROM orders LIMIT 10')
+            ->then(fn (QueryResult $result) => $result->resultRows);
     }
 ];
 
@@ -540,79 +566,67 @@ $tasks = [
 echo "Found " . count($users) . " users\n";
 echo "Found " . count($products) . " products\n";
 echo "Found " . count($orders) . " orders\n";
+
+$connection->quit();
 ```
 
-### JIRA Integration Example
+### API Integration Example with Retry
 
 ```php
 use function Matrix\{async, await, batch, retry};
+use React\Http\Browser;
 
-// Fetch JIRA tickets with retry support and batch processing
-function fetchJiraTickets($projectKey, $batchSize = 50, $maxBatches = 10) {
-    $apiUrl = "https://your-jira-instance.com/rest/api/2/search";
-    $apiToken = "your-api-token";
+// Fetch API data with retry support and batch processing
+function fetchApiData($endpoint, $apiToken, $batchSize = 50, $maxBatches = 10) {
+    $browser = new Browser();
+    $baseUrl = "https://api.example.com";
 
     // Create batches of requests
     $batches = [];
     for ($i = 0; $i < $maxBatches; $i++) {
         $batches[] = [
-            'url' => $apiUrl,
+            'url' => "{$baseUrl}/{$endpoint}",
             'params' => [
-                'jql' => "project = {$projectKey} ORDER BY created DESC",
-                'startAt' => $i * $batchSize,
-                'maxResults' => $batchSize
+                'offset' => $i * $batchSize,
+                'limit' => $batchSize
             ]
         ];
     }
 
     return await(batch(
         $batches,
-        function ($batchItems) use ($apiToken) {
+        function ($batchItems) use ($browser, $apiToken) {
             return retry(
-                function () use ($batchItems, $apiToken) {
-                    return async(function () use ($batchItems, $apiToken) {
-                        $results = [];
+                function () use ($batchItems, $browser, $apiToken) {
+                    $promises = [];
 
-                        foreach ($batchItems as $item) {
-                            $url = $item['url'] . '?' . http_build_query($item['params']);
+                    foreach ($batchItems as $item) {
+                        $url = $item['url'] . '?' . http_build_query($item['params']);
 
-                            $ch = curl_init();
-                            curl_setopt_array($ch, [
-                                CURLOPT_URL => $url,
-                                CURLOPT_RETURNTRANSFER => true,
-                                CURLOPT_HTTPHEADER => [
-                                    "Authorization: Bearer {$apiToken}",
-                                    "Content-Type: application/json"
-                                ]
-                            ]);
-
-                            $response = curl_exec($ch);
-                            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                            curl_close($ch);
-
-                            if ($status !== 200) {
-                                throw new \RuntimeException("API request failed with status {$status}");
+                        $promises[] = $browser->get($url, [
+                            'Authorization' => "Bearer {$apiToken}",
+                            'Content-Type' => 'application/json'
+                        ])->then(function ($response) {
+                            if ($response->getStatusCode() !== 200) {
+                                throw new \RuntimeException("API request failed with status " . $response->getStatusCode());
                             }
 
-                            $data = json_decode($response, true);
-                            if (!isset($data['issues'])) {
+                            $data = json_decode($response->getBody(), true);
+                            if (!isset($data['results'])) {
                                 throw new \RuntimeException("Unexpected response format");
                             }
 
-                            $results = array_merge($results, $data['issues']);
+                            return $data['results'];
+                        });
+                    }
 
-                            // If we've received fewer issues than requested, we've reached the end
-                            if (count($data['issues']) < $item['params']['maxResults']) {
-                                break 2; // Exit both loops
-                            }
-                        }
-
-                        return $results;
+                    return all($promises)->then(function ($results) {
+                        return array_merge(...$results);
                     });
                 },
                 3, // 3 retry attempts
                 function ($attempt, $error) {
-                    echo "JIRA API request failed (attempt {$attempt}): {$error->getMessage()}\n";
+                    echo "API request failed (attempt {$attempt}): {$error->getMessage()}\n";
                     return $attempt * 1.5; // Increasing delay between retries
                 }
             );
@@ -624,15 +638,14 @@ function fetchJiraTickets($projectKey, $batchSize = 50, $maxBatches = 10) {
 
 // Usage
 try {
-    $tickets = fetchJiraTickets('PROJ');
-    echo "Fetched " . count($tickets) . " JIRA tickets\n";
+    $data = fetchApiData('users', 'your-api-token');
+    echo "Fetched " . count($data) . " records\n";
 
-    // Process tickets
-    foreach ($tickets as $ticket) {
-        echo "- {$ticket['key']}: {$ticket['fields']['summary']}\n";
+    foreach ($data as $record) {
+        echo "- {$record['id']}: {$record['name']}\n";
     }
 } catch (\Throwable $e) {
-    echo "Error fetching JIRA tickets: " . $e->getMessage() . "\n";
+    echo "Error fetching API data: " . $e->getMessage() . "\n";
 }
 ```
 
@@ -726,20 +739,72 @@ public function test_rate_limiting(): void
 
 ## Performance Considerations
 
-- **Event Loop**: Matrix uses ReactPHP's event loop, which should be run only once in your application.
-- **Blocking Operations**: Avoid CPU-intensive tasks in async functions as they will block the event loop.
-- **Memory Management**: Be mindful of memory usage when creating many promises, as they remain in memory until resolved.
-- **Error Handling**: Always handle promise rejections to prevent unhandled promise rejection warnings.
-- **Concurrency Limits**: Use the concurrency parameters in `map()`, `batch()`, and `pool()` to control resource usage.
-- **Rate Limiting**: Use `rateLimit()` when working with APIs that have rate limits to avoid being throttled.
+- **Event Loop**: Matrix uses ReactPHP's event loop, which should be run only once in your application
+- **Blocking Operations**: Avoid CPU-intensive tasks and blocking I/O operations (like `file_get_contents()`, `sleep()`, or database queries without ReactPHP adapters) in async functions as they will block the entire event loop
+- **Memory Management**: Be mindful of memory usage when creating many promises, as they remain in memory until resolved
+- **Error Handling**: Always handle promise rejections to prevent unhandled promise rejection warnings
+- **Concurrency Limits**: Use the concurrency parameters in `map()`, `batch()`, and `pool()` to control resource usage and prevent overwhelming external services
+- **Rate Limiting**: Use `rateLimit()` when working with APIs that have rate limits to avoid being throttled
+
+## Common Pitfalls to Avoid
+
+### ❌ Using Blocking Operations
+
+```php
+// DON'T - This blocks the entire event loop
+$result = await(async(function () {
+    return file_get_contents('https://api.example.com'); // Blocking!
+}));
+```
+
+### ✅ Use Non-blocking Alternatives
+
+```php
+// DO - Use ReactPHP's non-blocking HTTP client
+use React\Http\Browser;
+
+$browser = new Browser();
+$result = await($browser->get('https://api.example.com'));
+```
+
+### ❌ CPU-Intensive Operations
+
+```php
+// DON'T - Heavy computation blocks the event loop
+$result = await(async(function () {
+    return array_sum(range(1, 10000000)); // Blocks event loop!
+}));
+```
+
+### ✅ Break Up Heavy Operations
+
+```php
+// DO - Break into smaller chunks or use separate processes
+$result = await(async(function () {
+    // Process in smaller batches with yields to event loop
+    $sum = 0;
+    for ($i = 1; $i <= 10000000; $i += 1000) {
+        $sum += array_sum(range($i, min($i + 999, 10000000)));
+        if ($i % 10000 === 0) {
+            // Yield control back to event loop periodically
+            await(delay(0.001));
+        }
+    }
+    return $sum;
+}));
+```
 
 ## How It Works
 
-1. **Event Loop Management**: The `async()` function schedules work on ReactPHP's event loop.
-2. **Promise Interface**: Promises provide `then` and `catch` methods for handling success and errors.
-3. **Synchronous Await**: The `await()` function runs the event loop until the promise is resolved or rejected.
-4. **Concurrency Control**: Functions like `map()`, `batch()`, and `pool()` limit the number of concurrent operations.
-5. **Error Handling**: Custom exception classes provide detailed information about failures.
+Matrix provides an intuitive async/await interface on top of ReactPHP's powerful event loop system:
+
+1. **Event Loop Management**: The `async()` function schedules work on ReactPHP's event loop, enabling non-blocking execution of I/O operations
+2. **Promise Interface**: All async operations return ReactPHP promises with `then()` and `catch()` methods for handling success and error cases
+3. **Synchronous Await**: The `await()` function runs the event loop until the promise resolves, providing a synchronous-looking interface
+4. **Concurrency Control**: Functions like `map()`, `batch()`, and `pool()` limit concurrent operations to prevent resource exhaustion
+5. **Error Handling**: Custom exception classes provide detailed information about failures, timeouts, and retry attempts
+
+**Key Point**: Matrix doesn't change PHP's single-threaded nature but makes it much easier to write efficient, non-blocking I/O code that can handle thousands of concurrent operations.
 
 ## Testing
 
