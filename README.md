@@ -66,8 +66,6 @@ ReactPHP promises and the event loop will be installed automatically via Compose
 Wraps a callable into an asynchronous function that returns a promise.
 
 ```php
-use function Matrix\async;
-
 $func = async(fn () => 'Success');
 
 $func->then(fn ($value) => echo $value) // Outputs: Success
@@ -79,8 +77,6 @@ $func->then(fn ($value) => echo $value) // Outputs: Success
 Awaits the resolution of a promise and returns its value. Optionally accepts a timeout in seconds.
 
 ```php
-use function Matrix\await;
-
 try {
     $result = await(async(fn () => 'Success'));
     echo $result; // Outputs: Success
@@ -100,8 +96,6 @@ try {
 Runs multiple promises concurrently and returns a promise that resolves with an array of all results.
 
 ```php
-use function Matrix\{async, await, all};
-
 $promises = [
     async(fn () => 'Result 1'),
     async(fn () => 'Result 2'),
@@ -117,8 +111,6 @@ $results = await(all($promises));
 Returns a promise that resolves with the value of the first resolved promise in the array.
 
 ```php
-use function Matrix\{async, await, race};
-
 $promises = [
     async(function () { sleep(2); return 'Slow'; }),
     async(function () { sleep(1); return 'Medium'; }),
@@ -134,8 +126,6 @@ $result = await(race($promises));
 Returns a promise that resolves when any promise resolves, or rejects when all promises reject.
 
 ```php
-use function Matrix\{async, await, any};
-
 $promises = [
     async(function () { throw new \Exception('Error 1'); }),
     async(function () { return 'Success'; }),
@@ -153,7 +143,6 @@ $result = await(any($promises));
 Maps an array of items through an async function with optional concurrency control and progress tracking.
 
 ```php
-use function Matrix\{async, await, map};
 use React\Http\Browser;
 
 $urls = ['https://example.com', 'https://example.org', 'https://example.net'];
@@ -185,8 +174,6 @@ print_r($results); // Array of response data
 Processes items in batches rather than one at a time for improved performance.
 
 ```php
-use function Matrix\{async, await, batch};
-
 $items = range(1, 100); // 100 items to process
 
 $results = await(batch(
@@ -209,8 +196,6 @@ print_r($results); // Array of processed items
 Executes an array of callables with limited concurrency.
 
 ```php
-use function Matrix\{async, await, pool};
-
 $tasks = [
     fn () => async(fn () => performTask(1)),
     fn () => async(fn () => performTask(2)),
@@ -236,8 +221,6 @@ print_r($results); // Array of task results
 Creates a promise that times out after a specified period.
 
 ```php
-use function Matrix\{async, await, timeout};
-
 try {
     $result = await(timeout(
         async(function () {
@@ -258,7 +241,6 @@ try {
 Retries a promise-returning function multiple times until success or max attempts reached.
 
 ```php
-use function Matrix\{async, await, retry};
 use React\Http\Browser;
 
 $browser = new Browser();
@@ -299,8 +281,6 @@ try {
 Creates a cancellable promise with a cleanup function.
 
 ```php
-use function Matrix\{async, await, cancellable};
-
 // Start a long operation
 $operation = async(function () {
     // Simulate long computation
@@ -337,8 +317,6 @@ if ($cancellable->isCancelled()) {
 Enhances a promise with additional error context.
 
 ```php
-use function Matrix\{async, await, withErrorContext};
-
 try {
     await(withErrorContext(
         async(function () {
@@ -362,8 +340,6 @@ try {
 Creates a promise that resolves after a specified delay.
 
 ```php
-use function Matrix\{async, await, delay};
-
 $result = await(delay(2.0, 'Delayed result'));
 echo $result; // Outputs: Delayed result (after 2 seconds)
 
@@ -383,8 +359,6 @@ async(fn () => 'Step 1')
 Executes promises in sequence, passing the result of each to the next.
 
 ```php
-use function Matrix\{async, await, waterfall};
-
 $result = await(waterfall(
     [
         function ($value) {
@@ -408,7 +382,6 @@ echo $result; // Outputs: Initial value -> Step 1 -> Step 2 -> Step 3
 Creates a rate-limited version of an async function.
 
 ```php
-use function Matrix\{async, await, rateLimit};
 use React\Http\Browser;
 
 $browser = new Browser();
@@ -493,7 +466,6 @@ await($promise); // Wait for all operations to complete
 ### Non-blocking HTTP Requests Example
 
 ```php
-use function Matrix\{async, await, map};
 use React\Http\Browser;
 
 // Fetch multiple URLs concurrently using non-blocking requests
@@ -536,7 +508,6 @@ foreach ($results as $result) {
 ### Database Operations Example (using ReactPHP MySQL)
 
 ```php
-use function Matrix\{async, await, pool};
 use React\MySQL\Factory;
 use React\MySQL\QueryResult;
 
@@ -573,7 +544,6 @@ $connection->quit();
 ### API Integration Example with Retry
 
 ```php
-use function Matrix\{async, await, batch, retry};
 use React\Http\Browser;
 
 // Fetch API data with retry support and batch processing
