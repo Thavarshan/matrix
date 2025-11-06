@@ -416,6 +416,132 @@ foreach ($urls as $url) {
 await(delay(10)); // Give time for requests to complete
 ```
 
+## Event System & Observability
+
+Matrix v3.4.0 introduces a comprehensive event system for monitoring and debugging async operations.
+
+### Event Listening
+
+Listen to promise lifecycle events:
+
+```php
+use function Matrix\Support\listen;
+use function Matrix\Support\async;
+use function Matrix\Support\await;
+
+// Listen to promise creation events
+listen('promise.created', function ($event) {
+    echo "Promise {$event->getPromiseId()} created (type: {$event->getType()})\n";
+});
+
+// Listen to promise resolution events
+listen('promise.resolved', function ($event) {
+    echo "Promise {$event->getPromiseId()} resolved in {$event->getDuration()}s\n";
+});
+
+// Listen to promise rejection events
+listen('promise.rejected', function ($event) {
+    echo "Promise {$event->getPromiseId()} rejected: {$event->getErrorMessage()}\n";
+});
+
+// Listen to timeout events
+listen('promise.timeout', function ($event) {
+    echo "Promise {$event->getPromiseId()} timed out after {$event->getTimeoutDuration()}s\n";
+});
+
+// Your async operations will now fire events
+$result = await(async(function () {
+    return 'Hello, World!';
+}));
+```
+
+### Available Events
+
+- **`promise.created`**: Fired when a promise is created
+- **`promise.resolved`**: Fired when a promise resolves successfully
+- **`promise.rejected`**: Fired when a promise is rejected
+- **`promise.timeout`**: Fired when a promise times out
+
+### Metrics Collection
+
+Monitor performance with built-in metrics:
+
+```php
+use function Matrix\Support\getMetrics;
+use function Matrix\Support\metricsCollector;
+
+// Execute some async operations
+await(async(fn () => 'task 1'));
+await(async(fn () => 'task 2'));
+
+// Get comprehensive metrics
+$metrics = getMetrics();
+
+echo "Active promises: {$metrics['active_promises']}\n";
+echo "Completed promises: {$metrics['completed_promises']}\n";
+echo "Success rate: {$metrics['success_rate']}%\n";
+echo "Average resolution time: {$metrics['average_resolution_time']}s\n";
+
+// Access detailed counters
+echo "Total created: {$metrics['counters']['promises.created']}\n";
+echo "Total resolved: {$metrics['counters']['promises.resolved']}\n";
+echo "Total rejected: {$metrics['counters']['promises.rejected']}\n";
+```
+
+### Advanced Event Usage
+
+Create custom monitoring and debugging tools:
+
+```php
+use function Matrix\Support\listen;
+use function Matrix\Support\eventDispatcher;
+
+// Custom performance monitoring
+$slowOperations = [];
+
+listen('promise.resolved', function ($event) use (&$slowOperations) {
+    if ($event->getDuration() > 1.0) { // Slower than 1 second
+        $slowOperations[] = [
+            'id' => $event->getPromiseId(),
+            'duration' => $event->getDuration(),
+        ];
+    }
+});
+
+// Custom error tracking
+$errorCounts = [];
+
+listen('promise.rejected', function ($event) use (&$errorCounts) {
+    $errorClass = $event->getErrorClass();
+    $errorCounts[$errorClass] = ($errorCounts[$errorClass] ?? 0) + 1;
+});
+
+// Disable events temporarily for performance-critical sections
+eventDispatcher()->setEnabled(false);
+// ... critical operations
+eventDispatcher()->setEnabled(true);
+```
+
+### Development and Debugging
+
+Use events for enhanced debugging:
+
+```php
+// Debug mode - log all promise activity
+if ($_ENV['DEBUG_PROMISES'] ?? false) {
+    listen('promise.created', fn($e) => error_log("Created: {$e->getPromiseId()}"));
+    listen('promise.resolved', fn($e) => error_log("Resolved: {$e->getPromiseId()} in {$e->getDuration()}s"));
+    listen('promise.rejected', fn($e) => error_log("Rejected: {$e->getPromiseId()} - {$e->getErrorMessage()}"));
+}
+
+// Performance monitoring
+listen('promise.resolved', function ($event) {
+    if ($event->getDuration() > 0.5) {
+        echo "⚠️  Slow operation detected: {$event->getDuration()}s\n";
+    }
+});
+```
+
 ## Examples
 
 ### Running Asynchronous Tasks

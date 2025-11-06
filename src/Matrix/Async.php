@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace Matrix;
 
+use Matrix\Events\EventDispatcher;
+use Matrix\Events\PromiseCreated;
+use Matrix\Events\PromiseRejected;
+use Matrix\Events\PromiseResolved;
+use Matrix\Events\PromiseTimeout;
 use Matrix\Exceptions\AsyncException;
 use Matrix\Exceptions\RetryException;
 use Matrix\Exceptions\TimeoutException;
 use Matrix\Interfaces\Async as AsyncInterface;
+use Matrix\Metrics\MetricsCollector;
 use Matrix\Promise\CancellablePromise;
 use Matrix\Promise\PromisePool;
 use Matrix\Support\LoopManager;
@@ -30,6 +36,16 @@ class Async implements AsyncInterface
     private static ?LoopInterface $loop = null;
 
     /**
+     * @var EventDispatcher|null The process-wide event dispatcher instance.
+     */
+    private static ?EventDispatcher $eventDispatcher = null;
+
+    /**
+     * @var MetricsCollector|null The process-wide metrics collector instance.
+     */
+    private static ?MetricsCollector $metricsCollector = null;
+
+    /**
      * Get (and memoize) the process-wide event loop instance.
      *
      * @return LoopInterface The event loop instance.
@@ -37,6 +53,26 @@ class Async implements AsyncInterface
     public static function loop(): LoopInterface
     {
         return self::$loop ??= Loop::get();
+    }
+
+    /**
+     * Get (and memoize) the process-wide event dispatcher instance.
+     *
+     * @return EventDispatcher The event dispatcher instance.
+     */
+    public static function eventDispatcher(): EventDispatcher
+    {
+        return self::$eventDispatcher ??= new EventDispatcher;
+    }
+
+    /**
+     * Get (and memoize) the process-wide metrics collector instance.
+     *
+     * @return MetricsCollector The metrics collector instance.
+     */
+    public static function metricsCollector(): MetricsCollector
+    {
+        return self::$metricsCollector ??= new MetricsCollector;
     }
 
     /**
@@ -49,7 +85,32 @@ class Async implements AsyncInterface
      */
     public static function coro(callable $callable): Promise\PromiseInterface
     {
+        $promiseId = self::generatePromiseId();
+        $startTime = microtime(true);
         $deferred = new Deferred;
+
+        // Fire promise created event
+        self::eventDispatcher()->dispatch(new PromiseCreated($promiseId, 'coro'));
+        self::metricsCollector()->promiseCreated($promiseId, 'coro');
+
+        $promise = $deferred->promise();
+
+        // Wrap the promise to fire events on resolution/rejection
+        $promise->then(
+            function ($value) use ($promiseId, $startTime) {
+                $duration = microtime(true) - $startTime;
+                self::eventDispatcher()->dispatch(new PromiseResolved($promiseId, $value, $duration));
+                self::metricsCollector()->promiseResolved($promiseId, $value);
+
+                return $value;
+            },
+            function ($reason) use ($promiseId, $startTime) {
+                $duration = microtime(true) - $startTime;
+                self::eventDispatcher()->dispatch(new PromiseRejected($promiseId, $reason, $duration));
+                self::metricsCollector()->promiseRejected($promiseId, $reason);
+                throw $reason;
+            }
+        );
 
         LoopManager::nextTick(static function () use ($callable, $deferred): void {
             try {
@@ -63,7 +124,15 @@ class Async implements AsyncInterface
             }
         });
 
-        return $deferred->promise();
+        return $promise;
+    }
+
+    /**
+     * Generate a unique promise ID.
+     */
+    public static function generatePromiseId(): string
+    {
+        return 'promise_'.uniqid().'_'.bin2hex(random_bytes(4));
     }
 
     /**
@@ -168,7 +237,13 @@ class Async implements AsyncInterface
         float $seconds,
         string $message = 'Operation timed out'
     ): Promise\PromiseInterface {
-        $timeoutPromise = self::delay($seconds)->then(function () use ($message, $seconds): Promise\PromiseInterface {
+        $promiseId = self::generatePromiseId();
+
+        $timeoutPromise = self::delay($seconds)->then(function () use ($message, $seconds, $promiseId): Promise\PromiseInterface {
+            // Fire timeout event
+            self::eventDispatcher()->dispatch(new PromiseTimeout($promiseId, $seconds, $message));
+            self::metricsCollector()->promiseTimeout($promiseId, $seconds);
+
             return self::reject(new TimeoutException($seconds, $message));
         });
 

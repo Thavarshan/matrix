@@ -1,6 +1,33 @@
 # Release Notes
 
-## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.3.1...HEAD)
+## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.4.0...HEAD)
+
+## [v3.4.0](https://github.com/Thavarshan/matrix/compare/v3.3.1...v3.4.0) - 2025-11-07
+
+### Added
+
+- **Event System & Observability**: Comprehensive event-driven architecture for monitoring async operations
+  - `EventDispatcher` class for managing event listeners and firing events
+  - Promise lifecycle events: `promise.created`, `promise.resolved`, `promise.rejected`, `promise.timeout`
+  - Event classes: `PromiseCreated`, `PromiseResolved`, `PromiseRejected`, `PromiseTimeout`
+  - Helper functions: `listen()`, `eventDispatcher()` for easy event handling
+- **Metrics Collection**: Built-in performance monitoring and statistics
+  - `MetricsCollector` class for tracking promise performance and statistics
+  - Real-time metrics: active promises, completion rates, success rates, timing data
+  - Detailed counters for different operation types and error classes
+  - Helper functions: `getMetrics()`, `metricsCollector()` for accessing metrics data
+- **Enhanced Debugging**: Event-driven debugging capabilities for better async operation visibility
+  - Promise ID generation for tracking individual operations
+  - Duration tracking for all async operations
+  - Error classification and counting
+  - Performance profiling with percentile statistics (p50, p95, p99)
+- **Comprehensive Test Coverage**: Full unit and integration tests for all event and metrics functionality
+
+### Changed
+
+- **Async Class Enhancement**: Modified `Async::coro()` and `Async::timeout()` methods to fire events and collect metrics
+- **Promise Lifecycle Tracking**: All promises now automatically fire events during creation, resolution, rejection, and timeout
+- **Helper Functions Expansion**: Added new helper functions for event system and metrics access
 
 ## [v3.3.1](https://github.com/Thavarshan/matrix/compare/v3.3.0...v3.3.1) - 2025-11-07
 

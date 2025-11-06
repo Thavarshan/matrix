@@ -233,3 +233,45 @@ if (! function_exists('retry')) {
         return Async::retry($factory, $maxAttempts, $backoffStrategy);
     }
 }
+
+if (! function_exists('eventDispatcher')) {
+    /**
+     * Get the global event dispatcher instance.
+     */
+    function eventDispatcher(): \Matrix\Events\EventDispatcher
+    {
+        return Async::eventDispatcher();
+    }
+}
+
+if (! function_exists('metricsCollector')) {
+    /**
+     * Get the global metrics collector instance.
+     */
+    function metricsCollector(): \Matrix\Metrics\MetricsCollector
+    {
+        return Async::metricsCollector();
+    }
+}
+
+if (! function_exists('listen')) {
+    /**
+     * Register an event listener.
+     */
+    function listen(string $eventName, callable $listener): void
+    {
+        Async::eventDispatcher()->listen($eventName, $listener);
+    }
+}
+
+if (! function_exists('getMetrics')) {
+    /**
+     * Get current metrics data.
+     *
+     * @return array<string, mixed>
+     */
+    function getMetrics(): array
+    {
+        return Async::metricsCollector()->getMetrics();
+    }
+}
