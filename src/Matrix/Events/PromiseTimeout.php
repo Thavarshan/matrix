@@ -17,9 +17,9 @@ class PromiseTimeout extends Event
     public function __construct(string $promiseId, float $timeoutDuration, string $message = 'Operation timed out', array $context = [])
     {
         parent::__construct(array_merge([
-            'promise_id' => $promiseId,
+            'promise_id'       => $promiseId,
             'timeout_duration' => $timeoutDuration,
-            'message' => $message,
+            'message'          => $message,
         ], $context));
     }
 

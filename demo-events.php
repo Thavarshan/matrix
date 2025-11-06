@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Matrix v3.4.0 Event System & Metrics Demo
  *
@@ -7,7 +9,7 @@
  * introduced in Matrix v3.4.0.
  */
 
-require_once __DIR__.'/vendor/autoload.php';
+require_once __DIR__ . '/vendor/autoload.php';
 
 use function Matrix\Support\async;
 use function Matrix\Support\await;
@@ -16,7 +18,7 @@ use function Matrix\Support\listen;
 use function Matrix\Support\timeout;
 
 echo "🚀 Matrix v3.4.0 Event System & Metrics Demo\n";
-echo '='.str_repeat('=', 45)."\n\n";
+echo '=' . str_repeat('=', 45) . "\n\n";
 
 // Set up event listeners for demonstration
 listen('promise.created', function ($event) {
@@ -41,6 +43,7 @@ echo "1. Running successful async operations...\n";
 
 // Execute some successful operations
 $results = [];
+
 for ($i = 1; $i <= 3; $i++) {
     $results[] = await(async(function () use ($i) {
         // Simulate different work durations
@@ -50,7 +53,7 @@ for ($i = 1; $i <= 3; $i++) {
     }));
 }
 
-echo "\nResults: ".implode(', ', $results)."\n\n";
+echo "\nResults: " . implode(', ', $results) . "\n\n";
 
 echo "2. Running operations with failures...\n";
 
@@ -88,30 +91,32 @@ try {
 }
 
 echo "\n4. Current Metrics Summary:\n";
-echo str_repeat('-', 30)."\n";
+echo str_repeat('-', 30) . "\n";
 
 $metrics = getMetrics();
 
 echo "📊 Performance Metrics:\n";
 echo "  Active promises: {$metrics['active_promises']}\n";
 echo "  Completed promises: {$metrics['completed_promises']}\n";
-echo '  Success rate: '.round($metrics['success_rate'], 2)."%\n";
-echo '  Average resolution time: '.round($metrics['average_resolution_time'] * 1000, 2)."ms\n\n";
+echo '  Success rate: ' . round($metrics['success_rate'], 2) . "%\n";
+echo '  Average resolution time: ' . round($metrics['average_resolution_time'] * 1000, 2) . "ms\n\n";
 
 echo "📈 Operation Counters:\n";
+
 foreach ($metrics['counters'] as $key => $count) {
     echo "  {$key}: {$count}\n";
 }
 
 if (! empty($metrics['timings'])) {
     echo "\n⏱️  Timing Statistics:\n";
+
     foreach ($metrics['timings'] as $operation => $stats) {
         echo "  {$operation}:\n";
         echo "    Count: {$stats['count']}\n";
-        echo '    Average: '.round($stats['avg'] * 1000, 2)."ms\n";
-        echo '    Min: '.round($stats['min'] * 1000, 2)."ms\n";
-        echo '    Max: '.round($stats['max'] * 1000, 2)."ms\n";
-        echo '    P95: '.round($stats['p95'] * 1000, 2)."ms\n";
+        echo '    Average: ' . round($stats['avg'] * 1000, 2) . "ms\n";
+        echo '    Min: ' . round($stats['min'] * 1000, 2) . "ms\n";
+        echo '    Max: ' . round($stats['max'] * 1000, 2) . "ms\n";
+        echo '    P95: ' . round($stats['p95'] * 1000, 2) . "ms\n";
     }
 }
 

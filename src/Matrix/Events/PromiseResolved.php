@@ -18,8 +18,8 @@ class PromiseResolved extends Event
     {
         parent::__construct(array_merge([
             'promise_id' => $promiseId,
-            'value' => $value,
-            'duration' => $duration,
+            'value'      => $value,
+            'duration'   => $duration,
         ], $context));
     }
 

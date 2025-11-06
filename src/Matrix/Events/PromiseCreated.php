@@ -18,7 +18,7 @@ class PromiseCreated extends Event
     {
         parent::__construct(array_merge([
             'promise_id' => $promiseId,
-            'type' => $type,
+            'type'       => $type,
         ], $context));
     }
 

@@ -46,10 +46,10 @@ class MetricsCollector
         }
 
         $this->activePromises[$promiseId] = [
-            'id' => $promiseId,
-            'type' => $type,
+            'id'         => $promiseId,
+            'type'       => $type,
             'created_at' => microtime(true),
-            'context' => $context,
+            'context'    => $context,
         ];
 
         $this->incrementCounter('promises.created');
@@ -70,9 +70,9 @@ class MetricsCollector
 
         $this->completedPromises[$promiseId] = array_merge($promise, [
             'resolved_at' => microtime(true),
-            'duration' => $duration,
-            'status' => 'resolved',
-            'value_type' => gettype($value),
+            'duration'    => $duration,
+            'status'      => 'resolved',
+            'value_type'  => gettype($value),
         ]);
 
         unset($this->activePromises[$promiseId]);
@@ -96,10 +96,10 @@ class MetricsCollector
         $duration = microtime(true) - $promise['created_at'];
 
         $this->completedPromises[$promiseId] = array_merge($promise, [
-            'rejected_at' => microtime(true),
-            'duration' => $duration,
-            'status' => 'rejected',
-            'error_class' => get_class($reason),
+            'rejected_at'   => microtime(true),
+            'duration'      => $duration,
+            'status'        => 'rejected',
+            'error_class'   => get_class($reason),
             'error_message' => $reason->getMessage(),
         ]);
 
@@ -107,7 +107,7 @@ class MetricsCollector
 
         $this->incrementCounter('promises.rejected');
         $this->incrementCounter("promises.rejected.{$promise['type']}");
-        $this->incrementCounter('errors.'.get_class($reason));
+        $this->incrementCounter('errors.' . get_class($reason));
         $this->recordTiming('promise.duration', $duration);
         $this->recordTiming("promise.duration.{$promise['type']}", $duration);
     }
@@ -171,12 +171,12 @@ class MetricsCollector
     public function getMetrics(): array
     {
         return [
-            'active_promises' => $this->getActivePromiseCount(),
-            'completed_promises' => $this->getCompletedPromiseCount(),
-            'success_rate' => $this->getSuccessRate(),
+            'active_promises'         => $this->getActivePromiseCount(),
+            'completed_promises'      => $this->getCompletedPromiseCount(),
+            'success_rate'            => $this->getSuccessRate(),
             'average_resolution_time' => $this->getAverageResolutionTime(),
-            'counters' => $this->counters,
-            'timings' => $this->getTimingSummary(),
+            'counters'                => $this->counters,
+            'timings'                 => $this->getTimingSummary(),
         ];
     }
 
@@ -255,13 +255,13 @@ class MetricsCollector
 
             $summary[$key] = [
                 'count' => $count,
-                'sum' => $sum,
-                'avg' => $sum / $count,
-                'min' => $values[0],
-                'max' => $values[$count - 1],
-                'p50' => $values[intval($count * 0.5)],
-                'p95' => $values[intval($count * 0.95)],
-                'p99' => $values[intval($count * 0.99)],
+                'sum'   => $sum,
+                'avg'   => $sum / $count,
+                'min'   => $values[0],
+                'max'   => $values[$count - 1],
+                'p50'   => $values[intval($count * 0.5)],
+                'p95'   => $values[intval($count * 0.95)],
+                'p99'   => $values[intval($count * 0.99)],
             ];
         }
 

@@ -17,11 +17,11 @@ class PromiseRejected extends Event
     public function __construct(string $promiseId, \Throwable $reason, float $duration, array $context = [])
     {
         parent::__construct(array_merge([
-            'promise_id' => $promiseId,
-            'reason' => $reason,
-            'duration' => $duration,
+            'promise_id'    => $promiseId,
+            'reason'        => $reason,
+            'duration'      => $duration,
             'error_message' => $reason->getMessage(),
-            'error_class' => get_class($reason),
+            'error_class'   => get_class($reason),
         ], $context));
     }
 

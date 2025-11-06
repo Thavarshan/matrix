@@ -108,6 +108,7 @@ class Async implements AsyncInterface
                 $duration = microtime(true) - $startTime;
                 self::eventDispatcher()->dispatch(new PromiseRejected($promiseId, $reason, $duration));
                 self::metricsCollector()->promiseRejected($promiseId, $reason);
+
                 throw $reason;
             }
         );
@@ -132,7 +133,7 @@ class Async implements AsyncInterface
      */
     public static function generatePromiseId(): string
     {
-        return 'promise_'.uniqid().'_'.bin2hex(random_bytes(4));
+        return 'promise_' . uniqid() . '_' . bin2hex(random_bytes(4));
     }
 
     /**
@@ -171,7 +172,7 @@ class Async implements AsyncInterface
             static function ($reason) use (&$error, &$settled, $cleanup): void {
                 $error = $reason instanceof \Throwable
                        ? $reason
-                       : new AsyncException((string) $reason);
+                       : new AsyncException((string)$reason);
                 $settled = true;
                 $cleanup();
                 LoopManager::stop();

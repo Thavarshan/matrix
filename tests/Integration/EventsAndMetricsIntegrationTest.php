@@ -8,7 +8,6 @@ use Matrix\Async;
 use Matrix\Events\PromiseCreated;
 use Matrix\Events\PromiseRejected;
 use Matrix\Events\PromiseResolved;
-use Tests\TestCase;
 
 use function Matrix\Support\async;
 use function Matrix\Support\await;
@@ -16,6 +15,8 @@ use function Matrix\Support\eventDispatcher;
 use function Matrix\Support\getMetrics;
 use function Matrix\Support\listen;
 use function Matrix\Support\metricsCollector;
+
+use Tests\TestCase;
 
 class EventsAndMetricsIntegrationTest extends TestCase
 {
@@ -176,6 +177,7 @@ class EventsAndMetricsIntegrationTest extends TestCase
 
         // Wait for all to complete
         $results = [];
+
         foreach ($operations as $operation) {
             $results[] = await($operation);
         }
