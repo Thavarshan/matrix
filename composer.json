@@ -16,7 +16,7 @@
         "source": "https://github.com/Thavarshan/matrix"
     },
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "ext-pcntl": "*",
         "ext-posix": "*",
         "react/event-loop": "^1.5",
