@@ -1,6 +1,12 @@
 # Release Notes
 
-## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.3.0...HEAD)
+## [Unreleased](https://github.com/Thavarshan/matrix/compare/v3.3.1...HEAD)
+
+## [v3.3.1](https://github.com/Thavarshan/matrix/compare/v3.3.0...v3.3.1) - 2025-11-07
+
+### Changed
+
+- **Helper Functions Namespace**: Added `Matrix\Support` namespace to all helper functions in `src/Matrix/Support/helpers.php`. This change provides better organization and prevents global namespace pollution while maintaining backward compatibility through function existence checks.
 
 ## [v3.3.0](https://github.com/Thavarshan/matrix/compare/v3.2.0...v3.3.0) - 2025-05-11
 
@@ -47,7 +53,6 @@
   - `all(array $promises)`: Run multiple promises concurrently and get an array of results.
   - `race(array $promises)`: Get the result of the first promise that resolves.
   - `any(array $promises)`: Get the result of the first promise that succeeds.
-  
 
 ### Changed
 
@@ -55,7 +60,6 @@
   - Added proper return type `LoopInterface` to `getLoop()` function.
   - Enhanced documentation with more detailed parameter and return type descriptions.
   - Included examples of various usage patterns in function documentation.
-  
 
 ### Fixed
 
@@ -63,7 +67,6 @@
   - Removed premature `getLoop()->stop()` calls in the `async()` function.
   - Added resolution flag in `await()` to prevent running the event loop if a promise is already resolved.
   - Fixed potential issues with multiple concurrent promises by allowing the event loop to continue running when needed.
-  
 
 ## [v3.1.0](https://github.com/Thavarshan/matrix/compare/v3.0.1...v3.1.0) - 2024-12-20
 
@@ -72,28 +75,24 @@
 - **Enhanced `async()` and `await()` Functions**:
   - Automatically manage the ReactPHP event loop, removing the need for manual `getLoop()->run()` calls in most scenarios.
   - Added improved handling of promise resolution and rejection, ensuring consistent results in asynchronous workflows.
-  
 
 ### Changed
 
 - **Simplified Code Structure**:
   - Removed reliance on `pcntl_fork()` for child process management, enabling better compatibility with web server environments.
   - Improved API consistency for seamless integration in both CLI and web-based applications.
-  
 
 ### Removed
 
 - **Deprecated Fork-Based Concurrency**:
   - Eliminated the usage of `pcntl_fork()` to support non-blocking asynchronous operations without requiring process forking.
   - Streamlined error handling and promise lifecycle management by adopting a purely ReactPHP-based approach.
-  
 
 ### Fixed
 
 - **Web Compatibility**:
   - Resolved issues that previously caused incompatibility with multi-threaded web server configurations like Apache's Worker MPM.
   - Ensured that asynchronous tasks can now execute reliably in web contexts.
-  
 
 ## [v3.0.1](https://github.com/Thavarshan/matrix/compare/v3.0.0...v3.0.1) - 2024-12-18
 

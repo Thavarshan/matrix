@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Matrix\Support;
+
 use Matrix\Async;
 use React\EventLoop\LoopInterface;
 use React\Promise\PromiseInterface;
