@@ -17,7 +17,7 @@ class AsyncException extends RuntimeException
      *
      * @param  string  $message  The exception message
      * @param  int  $code  The exception code
-     * @param  \Throwable|null  $previous  The previous throwable
+     * @param  Throwable|null  $previous  The previous throwable
      */
     public function __construct(string $message, int $code = 0, ?Throwable $previous = null)
     {

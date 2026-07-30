@@ -5,157 +5,176 @@ declare(strict_types=1);
 namespace Matrix;
 
 use Matrix\Events\EventDispatcher;
-use Matrix\Events\PromiseCreated;
-use Matrix\Events\PromiseRejected;
-use Matrix\Events\PromiseResolved;
-use Matrix\Events\PromiseTimeout;
 use Matrix\Exceptions\AsyncException;
 use Matrix\Exceptions\RetryException;
 use Matrix\Exceptions\TimeoutException;
 use Matrix\Interfaces\Async as AsyncInterface;
 use Matrix\Metrics\MetricsCollector;
-use Matrix\Promise\CancellablePromise;
 use Matrix\Promise\PromisePool;
+use Matrix\Support\Lifecycle;
 use Matrix\Support\LoopManager;
 use Matrix\Support\RateLimiter;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
+use React\EventLoop\TimerInterface;
 use React\Promise;
 use React\Promise\Deferred;
+use React\Promise\PromiseInterface;
 
-/**
- * Lightweight async helpers for ReactPHP.
- *
- * Provides static methods to work with promises and event loops in a coroutine-style.
- */
-class Async implements AsyncInterface
+/** Static async façade for ReactPHP. */
+final class Async implements AsyncInterface
 {
-    /**
-     * @var LoopInterface|null The process-wide event loop instance.
-     */
-    private static ?LoopInterface $loop = null;
-
-    /**
-     * @var EventDispatcher|null The process-wide event dispatcher instance.
-     */
     private static ?EventDispatcher $eventDispatcher = null;
 
-    /**
-     * @var MetricsCollector|null The process-wide metrics collector instance.
-     */
     private static ?MetricsCollector $metricsCollector = null;
 
-    /**
-     * Get (and memoize) the process-wide event loop instance.
-     *
-     * @return LoopInterface The event loop instance.
-     */
+    private function __construct() {}
+
     public static function loop(): LoopInterface
     {
-        return self::$loop ??= Loop::get();
+        return Loop::get();
     }
 
-    /**
-     * Get (and memoize) the process-wide event dispatcher instance.
-     *
-     * @return EventDispatcher The event dispatcher instance.
-     */
     public static function eventDispatcher(): EventDispatcher
     {
         return self::$eventDispatcher ??= new EventDispatcher;
     }
 
-    /**
-     * Get (and memoize) the process-wide metrics collector instance.
-     *
-     * @return MetricsCollector The metrics collector instance.
-     */
     public static function metricsCollector(): MetricsCollector
     {
         return self::$metricsCollector ??= new MetricsCollector;
     }
 
-    /**
-     * Run a callable "coroutine-style".
-     *
-     * @template T
-     *
-     * @param  callable(): (T|Promise\PromiseInterface<T>)  $callable  The callable to execute.
-     * @return Promise\PromiseInterface<T> A promise that resolves with the callable's result.
-     */
-    public static function coro(callable $callable): Promise\PromiseInterface
+    /** @param callable(): mixed $callable @return PromiseInterface<mixed> */
+    public static function coro(callable $callable): PromiseInterface
     {
-        $promiseId = self::generatePromiseId();
-        $startTime = microtime(true);
         $deferred = new Deferred;
-
-        // Fire promise created event
-        self::eventDispatcher()->dispatch(new PromiseCreated($promiseId, 'coro'));
-        self::metricsCollector()->promiseCreated($promiseId, 'coro');
-
-        $promise = $deferred->promise();
-
-        // Wrap the promise to fire events on resolution/rejection
-        $promise->then(
-            function ($value) use ($promiseId, $startTime) {
-                $duration = microtime(true) - $startTime;
-                self::eventDispatcher()->dispatch(new PromiseResolved($promiseId, $value, $duration));
-                self::metricsCollector()->promiseResolved($promiseId, $value);
-
-                return $value;
-            },
-            function ($reason) use ($promiseId, $startTime) {
-                $duration = microtime(true) - $startTime;
-                self::eventDispatcher()->dispatch(new PromiseRejected($promiseId, $reason, $duration));
-                self::metricsCollector()->promiseRejected($promiseId, $reason);
-
-                throw $reason;
-            }
-        );
 
         LoopManager::nextTick(static function () use ($callable, $deferred): void {
             try {
-                $result = $callable();
-
-                ($result instanceof Promise\PromiseInterface)
-                    ? $result->then([$deferred, 'resolve'], [$deferred, 'reject'])
-                    : $deferred->resolve($result);
-            } catch (\Throwable $e) {
-                $deferred->reject($e);
+                Promise\resolve($callable())->then([$deferred, 'resolve'], [$deferred, 'reject']);
+            } catch (\Throwable $exception) {
+                $deferred->reject($exception);
             }
         });
 
-        return $promise;
+        return Lifecycle::track($deferred->promise(), 'coro');
     }
 
-    /**
-     * Generate a unique promise ID.
-     */
     public static function generatePromiseId(): string
     {
-        return 'promise_' . uniqid() . '_' . bin2hex(random_bytes(4));
+        return Lifecycle::id();
     }
 
-    /**
-     * Block the current fibre / CLI process until the promise settles.
-     *
-     * @template T
-     *
-     * @param  Promise\PromiseInterface<T>  $promise  The promise to await.
-     * @param  float|null  $timeout  Optional timeout in seconds.
-     * @return T The resolved value of the promise.
-     *
-     * @throws TimeoutException If the promise times out.
-     * @throws \Throwable If the promise is rejected.
-     */
-    public static function await(Promise\PromiseInterface $promise, ?float $timeout = null)
+    /** @param PromiseInterface<mixed> $promise @return mixed */
+    public static function await(PromiseInterface $promise, ?float $timeout = null): mixed
     {
+        if ($timeout !== null && $timeout <= 0) {
+            throw new \InvalidArgumentException('Await timeout must be greater than zero.');
+        }
+
+        if (LoopManager::isRunning()) {
+            throw new AsyncException('await() cannot be called while the Matrix event loop is running.');
+        }
+
         $value = null;
         $error = null;
         $settled = false;
+        /** @var TimerInterface|null $timer */
         $timer = null;
+        $finish = static function () use (&$timer): void {
+            if ($timer !== null) {
+                LoopManager::cancelTimer($timer);
+                $timer = null;
+            }
+            LoopManager::stop();
+        };
 
-        $cleanup = function () use (&$timer): void {
+        $promise->then(
+            static function (mixed $result) use (&$value, &$settled, $finish): void {
+                $value = $result;
+                $settled = true;
+                $finish();
+            },
+            static function (\Throwable $reason) use (&$error, &$settled, $finish): void {
+                $error = $reason;
+                $settled = true;
+                $finish();
+            }
+        );
+
+        if (! $settled && $timeout !== null) {
+            $timer = LoopManager::delay($timeout, static function () use (&$error, &$settled, $finish, $promise, $timeout): void {
+                if ($settled) {
+                    return;
+                }
+                $settled = true;
+                $error = new TimeoutException($timeout);
+                $promise->cancel();
+                $finish();
+            });
+        }
+
+        if (! $settled) {
+            LoopManager::run();
+        }
+
+        if (! $settled) {
+            throw new AsyncException('Promise did not settle before the event loop became idle.');
+        }
+
+        if ($error !== null) {
+            throw $error;
+        }
+
+        return $value;
+    }
+
+    /** @return PromiseInterface<mixed> */
+    public static function delay(float $seconds, mixed $value = null): PromiseInterface
+    {
+        if ($seconds < 0) {
+            throw new \InvalidArgumentException('Delay must not be negative.');
+        }
+
+        /** @var TimerInterface|null $timer */
+        $timer = null;
+        $deferred = new Deferred(static function () use (&$timer): void {
+            if ($timer !== null) {
+                LoopManager::cancelTimer($timer);
+                $timer = null;
+            }
+        });
+        $timer = LoopManager::delay($seconds, static function () use ($deferred, $value): void {
+            $deferred->resolve($value);
+        });
+
+        return Lifecycle::track($deferred->promise(), 'delay');
+    }
+
+    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    public static function timeout(PromiseInterface $promise, float $seconds, string $message = 'Operation timed out'): PromiseInterface
+    {
+        if ($seconds <= 0) {
+            throw new \InvalidArgumentException('Timeout must be greater than zero.');
+        }
+
+        $id = Lifecycle::id();
+        /** @var TimerInterface|null $timer */
+        $timer = null;
+        $settled = false;
+        $deferred = new Deferred(static function () use (&$timer, &$settled, $promise): void {
+            if ($settled) {
+                return;
+            }
+            $settled = true;
+
+            if ($timer !== null) {
+                LoopManager::cancelTimer($timer);
+            }
+            $promise->cancel();
+        });
+        $finish = static function () use (&$timer): void {
             if ($timer !== null) {
                 LoopManager::cancelTimer($timer);
                 $timer = null;
@@ -163,518 +182,339 @@ class Async implements AsyncInterface
         };
 
         $promise->then(
-            static function ($result) use (&$value, &$settled, $cleanup): void {
-                $value = $result;
+            static function (mixed $value) use ($deferred, &$settled, $finish): void {
+                if ($settled) {
+                    return;
+                }
                 $settled = true;
-                $cleanup();
-                LoopManager::stop();
+                $finish();
+                $deferred->resolve($value);
             },
-            static function ($reason) use (&$error, &$settled, $cleanup): void {
-                $error = $reason instanceof \Throwable
-                       ? $reason
-                       : new AsyncException((string)$reason);
+            static function (\Throwable $reason) use ($deferred, &$settled, $finish): void {
+                if ($settled) {
+                    return;
+                }
                 $settled = true;
-                $cleanup();
-                LoopManager::stop();
+                $finish();
+                $deferred->reject($reason);
             }
         );
 
-        // Set up timeout if specified
-        if ($timeout !== null && $timeout > 0) {
-            $timeoutValue = $timeout; // Create a copy for the closure
-            $timer = LoopManager::delay($timeoutValue, static function () use (&$error, &$settled, $cleanup, $timeoutValue): void {
-                $error = new TimeoutException($timeoutValue);
-                $settled = true;
-                $cleanup();
-                LoopManager::stop();
-            });
-        }
-
-        // Will return immediately if already settled
-        if (! $settled) {
-            LoopManager::run();
-        }
-
-        if ($error !== null) {
-            throw $error;
-        }
-
-        /** @var T $value */
-        return $value;
-    }
-
-    /**
-     * Create a promise that resolves after a specified delay.
-     *
-     * @template T
-     *
-     * @param  float  $seconds  Delay in seconds.
-     * @param  T  $value  Value to resolve with (optional).
-     * @return Promise\PromiseInterface<T> A promise that resolves after the delay.
-     */
-    public static function delay(float $seconds, mixed $value = null): Promise\PromiseInterface
-    {
-        $deferred = new Deferred;
-
-        LoopManager::delay($seconds, static function () use ($deferred, $value): void {
-            $deferred->resolve($value);
-        });
-
-        return $deferred->promise();
-    }
-
-    /**
-     * Create a promise that times out after a specified period.
-     *
-     * @template T
-     *
-     * @param  Promise\PromiseInterface<T>  $promise  The promise to add a timeout to.
-     * @param  float  $seconds  Timeout in seconds.
-     * @param  string  $message  Custom timeout message.
-     * @return Promise\PromiseInterface<T> A promise that rejects with a timeout error if the original promise doesn't settle in time.
-     */
-    public static function timeout(
-        Promise\PromiseInterface $promise,
-        float $seconds,
-        string $message = 'Operation timed out'
-    ): Promise\PromiseInterface {
-        $promiseId = self::generatePromiseId();
-
-        $timeoutPromise = self::delay($seconds)->then(function () use ($message, $seconds, $promiseId): Promise\PromiseInterface {
-            // Fire timeout event
-            self::eventDispatcher()->dispatch(new PromiseTimeout($promiseId, $seconds, $message));
-            self::metricsCollector()->promiseTimeout($promiseId, $seconds);
-
-            return self::reject(new TimeoutException($seconds, $message));
-        });
-
-        return self::race([$promise, $timeoutPromise]);
-    }
-
-    /**
-     * Wait for all promises to resolve.
-     *
-     * @template T
-     *
-     * @param  array<Promise\PromiseInterface<T>>  $promises  An array of promises.
-     * @return Promise\PromiseInterface<array<T>> A promise that resolves with an array of results.
-     */
-    public static function all(array $promises): Promise\PromiseInterface
-    {
-        return Promise\all($promises);
-    }
-
-    /**
-     * Wait for any promise to resolve.
-     *
-     * @template T
-     *
-     * @param  array<Promise\PromiseInterface<T>>  $promises  An array of promises.
-     * @return Promise\PromiseInterface<T> A promise that resolves with the first resolved value.
-     */
-    public static function any(array $promises): Promise\PromiseInterface
-    {
-        return Promise\any($promises);
-    }
-
-    /**
-     * Race multiple promises, resolving with the first to settle.
-     *
-     * @template T
-     *
-     * @param  array<Promise\PromiseInterface<T>>  $promises  An array of promises.
-     * @return Promise\PromiseInterface<T> A promise that resolves or rejects with the first settled value.
-     */
-    public static function race(array $promises): Promise\PromiseInterface
-    {
-        return Promise\race($promises);
-    }
-
-    /**
-     * Resolve a value into a promise.
-     *
-     * @template T
-     *
-     * @param  T  $value  The value to resolve.
-     * @return Promise\PromiseInterface<T> A promise resolved with the given value.
-     */
-    public static function resolve(mixed $value): Promise\PromiseInterface
-    {
-        return Promise\resolve($value);
-    }
-
-    /**
-     * Reject a promise with a reason.
-     *
-     * @template T
-     *
-     * @param  mixed  $reason  The reason for rejection.
-     * @return Promise\PromiseInterface<T> A promise rejected with the given reason.
-     */
-    public static function reject(mixed $reason): Promise\PromiseInterface
-    {
-        return Promise\reject($reason);
-    }
-
-    /**
-     * Map an array of items through an async function.
-     *
-     * @template TIn
-     * @template TOut
-     *
-     * @param  array<TIn>  $items  Array of items to process.
-     * @param  callable(TIn): Promise\PromiseInterface<TOut>  $callback  Async callback function.
-     * @param  int  $concurrency  Maximum number of concurrent promises. Set to 0 for unlimited.
-     * @param  callable(int $done, int $total): void  $onProgress  Optional progress callback.
-     * @return Promise\PromiseInterface<array<TOut>> Promise resolving to array of results.
-     */
-    public static function map(
-        array $items,
-        callable $callback,
-        int $concurrency = 0,
-        ?callable $onProgress = null
-    ): Promise\PromiseInterface {
-        if (empty($items)) {
-            return self::resolve([]);
-        }
-
-        if ($concurrency <= 0) {
-            // Map all items concurrently
-            $promises = array_map($callback, $items);
-
-            // If progress callback is provided, wrap each promise to report progress
-            if ($onProgress !== null) {
-                $total = count($promises);
-                $completed = 0;
-
-                $promises = array_map(function ($promise) use (&$completed, $total, $onProgress) {
-                    return $promise->then(function ($result) use (&$completed, $total, $onProgress) {
-                        $completed++;
-                        $onProgress($completed, $total);
-
-                        return $result;
-                    });
-                }, $promises);
-            }
-
-            return self::all($promises);
-        }
-
-        // Process with limited concurrency
-        $results = [];
-        $pending = 0;
-        $position = 0;
-        $completed = 0;
-        $itemCount = count($items);
-        $deferred = new Deferred;
-
-        $processNext = function () use (
-            &$pending,
-            &$position,
-            &$completed,
-            &$results,
-            $items,
-            $callback,
-            $itemCount,
-            $deferred,
-            &$processNext,
-            $concurrency,
-            $onProgress
-        ): void {
-            if ($position >= $itemCount && $pending === 0) {
-                ksort($results);
-                $deferred->resolve($results);
-
+        $timer = LoopManager::delay($seconds, static function () use ($deferred, &$settled, $promise, $seconds, $message, $id): void {
+            if ($settled) {
                 return;
             }
+            $settled = true;
+            Lifecycle::timeout($id, 'timeout', $seconds, $message);
+            $promise->cancel();
+            $deferred->reject(new TimeoutException($seconds, $message));
+        });
 
-            while ($pending < $concurrency && $position < $itemCount) {
-                $idx = $position++;
-                $item = $items[$idx];
-                $pending++;
-
-                $promise = $callback($item);
-
-                $promise->then(
-                    function ($result) use (
-                        $idx,
-                        &$results,
-                        &$pending,
-                        &$completed,
-                        $itemCount,
-                        $processNext,
-                        $onProgress
-                    ): void {
-                        $results[$idx] = $result;
-                        $pending--;
-                        $completed++;
-
-                        if ($onProgress !== null) {
-                            $onProgress($completed, $itemCount);
-                        }
-
-                        $processNext();
-                    },
-                    function ($reason) use ($deferred): void {
-                        $deferred->reject($reason);
-                    }
-                );
-            }
-        };
-
-        LoopManager::nextTick($processNext);
-
-        return $deferred->promise();
+        return Lifecycle::track($deferred->promise(), 'timeout', $id);
     }
 
-    /**
-     * Process items in batches rather than one at a time.
-     *
-     * @template TIn
-     * @template TOut
-     *
-     * @param  array<TIn>  $items  Array of items to process.
-     * @param  callable(array<TIn>): Promise\PromiseInterface<array<TOut>>  $batchCallback
-     *                                                                                      Callback that processes a batch of items
-     * @param  int  $batchSize  Size of each batch
-     * @param  int  $concurrency  Maximum number of concurrent batches
-     * @return Promise\PromiseInterface<array<TOut>> Promise resolving to array of results.
-     */
-    public static function batch(
-        array $items,
-        callable $batchCallback,
-        int $batchSize = 10,
-        int $concurrency = 1
-    ): Promise\PromiseInterface {
-        if (empty($items)) {
-            return self::resolve([]);
+    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
+    public static function all(iterable $promisesOrValues): PromiseInterface
+    {
+        return Lifecycle::track(Promise\all($promisesOrValues), 'all');
+    }
+
+    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
+    public static function any(iterable $promisesOrValues): PromiseInterface
+    {
+        return Lifecycle::track(Promise\any($promisesOrValues), 'any');
+    }
+
+    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
+    public static function race(iterable $promisesOrValues): PromiseInterface
+    {
+        return Lifecycle::track(Promise\race($promisesOrValues), 'race');
+    }
+
+    /** @return PromiseInterface<mixed> */
+    public static function resolve(mixed $value): PromiseInterface
+    {
+        return Lifecycle::track(Promise\resolve($value), 'resolve');
+    }
+
+    /** @return PromiseInterface<mixed> */
+    public static function reject(\Throwable $reason): PromiseInterface
+    {
+        return Lifecycle::track(Promise\reject($reason), 'reject');
+    }
+
+    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
+    public static function map(iterable $items, callable $callback, int $concurrency = 0, ?callable $onProgress = null): PromiseInterface
+    {
+        if ($concurrency < 0) {
+            throw new \InvalidArgumentException('Map concurrency must be zero or greater.');
         }
 
-        // Split into batches
-        $batches = array_chunk($items, $batchSize);
-
-        // Process each batch with the map function
-        return self::map($batches, $batchCallback, $concurrency)
-            ->then(function (array $results) {
-                // Flatten the results from all batches
-                if (empty($results)) {
-                    return [];
-                }
-
-                return array_merge(...$results);
-            });
+        return Lifecycle::track(self::mapInternal($items, $callback, $concurrency, $onProgress), 'map');
     }
 
-    /**
-     * Retry a promise-returning function multiple times until success or max attempts reached.
-     *
-     * @template T
-     *
-     * @param  callable(): Promise\PromiseInterface<T>  $factory  Function that returns a promise
-     * @param  int  $maxAttempts  Maximum number of retry attempts
-     * @param  callable(int $attempt, \Throwable $error): float|null  $backoffStrategy
-     *                                                                                  Function that returns delay in seconds or null to stop retrying
-     * @return Promise\PromiseInterface<T> A promise that resolves when the operation succeeds
-     */
-    public static function retry(
-        callable $factory,
-        int $maxAttempts = 3,
-        ?callable $backoffStrategy = null
-    ): Promise\PromiseInterface {
-        $backoffStrategy ??= fn (int $attempt, \Throwable $error): float => min(pow(2, $attempt - 1) * 0.1, 5.0); // Exponential backoff with 5s cap
+    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
+    public static function batch(iterable $items, callable $batchCallback, int $batchSize = 10, int $concurrency = 1): PromiseInterface
+    {
+        if ($batchSize < 1 || $concurrency < 1) {
+            throw new \InvalidArgumentException('Batch size and concurrency must be positive.');
+        }
+
+        $batches = array_chunk(array_values(iterator_to_array($items, false)), $batchSize);
+
+        return Lifecycle::track(self::mapInternal($batches, $batchCallback, $concurrency, null)->then(
+            static fn (array $results): array => array_merge(...$results)
+        ), 'batch');
+    }
+
+    /** @return PromiseInterface<mixed> */
+    public static function retry(callable $factory, int $maxAttempts = 3, ?callable $backoffStrategy = null): PromiseInterface
+    {
+        if ($maxAttempts < 1) {
+            throw new \InvalidArgumentException('Retry attempts must be positive.');
+        }
 
         $attempt = 0;
         $failures = [];
+        /** @var PromiseInterface<mixed>|null $active */
+        $active = null;
+        /** @var TimerInterface|null $timer */
+        $timer = null;
+        $settled = false;
+        $deferred = new Deferred(static function () use (&$active, &$timer, &$settled): void {
+            $settled = true;
 
-        $deferred = new Deferred;
+            if ($timer !== null) {
+                LoopManager::cancelTimer($timer);
+            }
 
-        $tryOperation = function () use (
-            &$attempt,
-            &$failures,
-            $factory,
-            $maxAttempts,
-            $backoffStrategy,
-            $deferred,
-            &$tryOperation
-        ): void {
+            if ($active !== null) {
+                $active->cancel();
+            }
+        });
+
+        $try = null;
+        $try = static function () use (&$try, &$attempt, &$failures, &$active, &$timer, &$settled, $factory, $maxAttempts, $backoffStrategy, $deferred): void {
+            if ($settled) {
+                return;
+            }
             $attempt++;
 
             try {
-                $factory()
-                    ->then(
-                        function ($result) use ($deferred): void {
-                            $deferred->resolve($result);
-                        },
-                        function (\Throwable $error) use (
-                            &$attempt,
-                            &$failures,
-                            $maxAttempts,
-                            $backoffStrategy,
-                            $deferred,
-                            $tryOperation
-                        ): void {
-                            $failures[] = $error;
-
-                            if ($attempt >= $maxAttempts) {
-                                $deferred->reject(
-                                    new RetryException(
-                                        $attempt,
-                                        $failures,
-                                        "All {$maxAttempts} retry attempts failed",
-                                        0,
-                                        $error
-                                    )
-                                );
-
-                                return;
-                            }
-
-                            $delay = $backoffStrategy($attempt, $error);
-
-                            if ($delay === null) {
-                                $deferred->reject($error);
-
-                                return;
-                            }
-
-                            LoopManager::delay($delay, $tryOperation);
-                        }
-                    );
-            } catch (\Throwable $e) {
-                $failures[] = $e;
-
-                if ($attempt >= $maxAttempts) {
-                    $deferred->reject(
-                        new RetryException(
-                            $attempt,
-                            $failures,
-                            "All {$maxAttempts} retry attempts failed",
-                            0,
-                            $e
-                        )
-                    );
-
-                    return;
-                }
-
-                $delay = $backoffStrategy($attempt, $e);
-
-                if ($delay === null) {
-                    $deferred->reject($e);
-
-                    return;
-                }
-
-                LoopManager::delay($delay, $tryOperation);
+                $active = Promise\resolve($factory());
+            } catch (\Throwable $exception) {
+                $active = Promise\reject($exception);
             }
+            $active->then(
+                static function (mixed $value) use ($deferred, &$settled): void {
+                    if (! $settled) {
+                        $settled = true;
+                        $deferred->resolve($value);
+                    }
+                },
+                static function (\Throwable $error) use (&$try, &$attempt, &$failures, &$active, &$timer, &$settled, $maxAttempts, $backoffStrategy, $deferred): void {
+                    if ($settled) {
+                        return;
+                    }
+                    $active = null;
+                    $failures[] = $error;
+
+                    if ($attempt >= $maxAttempts) {
+                        $settled = true;
+                        $deferred->reject(new RetryException($attempt, $failures, "All {$maxAttempts} retry attempts failed", 0, $error));
+
+                        return;
+                    }
+                    $delay = $backoffStrategy !== null
+                        ? $backoffStrategy($attempt, $error)
+                        : min(2 ** ($attempt - 1) * 0.1, 5.0);
+
+                    if ($delay === null) {
+                        $settled = true;
+                        $deferred->reject($error);
+
+                        return;
+                    }
+
+                    if ($delay < 0) {
+                        $settled = true;
+                        $deferred->reject(new \InvalidArgumentException('Retry backoff must not be negative.', 0, $error));
+
+                        return;
+                    }
+                    $timer = LoopManager::delay($delay, $try);
+                }
+            );
         };
 
-        LoopManager::nextTick($tryOperation);
+        LoopManager::nextTick($try);
 
-        return $deferred->promise();
+        return Lifecycle::track($deferred->promise(), 'retry');
     }
 
-    /**
-     * Execute an array of callables with limited concurrency.
-     *
-     * @template T
-     *
-     * @param  array<callable(): Promise\PromiseInterface<T>>  $callables  Functions that return promises
-     * @param  int  $concurrency  Maximum number of concurrent executions
-     * @param  callable(int $done, int $total): void|null  $onProgress  Progress callback
-     * @return Promise\PromiseInterface<array<T>> Promise resolving to array of results
-     */
-    public static function pool(
-        array $callables,
-        int $concurrency = 5,
-        ?callable $onProgress = null
-    ): Promise\PromiseInterface {
+    /** @param iterable<array-key, callable(): mixed> $callables @return PromiseInterface<mixed> */
+    public static function pool(iterable $callables, int $concurrency = 5, ?callable $onProgress = null): PromiseInterface
+    {
+        if ($concurrency < 1) {
+            throw new \InvalidArgumentException('Pool concurrency must be positive.');
+        }
+
         return PromisePool::create($callables, $concurrency, $onProgress);
     }
 
-    /**
-     * Execute promises in sequence, passing the result of each to the next.
-     *
-     * @template T
-     *
-     * @param  array<callable(mixed): Promise\PromiseInterface<T>>  $callables
-     *                                                                          Array of callables that accept previous result and return a promise
-     * @param  mixed  $initialValue  Initial value to pass to the first callable
-     * @return Promise\PromiseInterface<T> Promise resolving to the final result
-     */
-    public static function waterfall(array $callables, mixed $initialValue = null): Promise\PromiseInterface
+    /** @param iterable<callable(mixed): mixed> $callables @return PromiseInterface<mixed> */
+    public static function waterfall(iterable $callables, mixed $initialValue = null): PromiseInterface
     {
-        return array_reduce(
-            $callables,
-            fn (Promise\PromiseInterface $carry, callable $callable) => $carry->then($callable),
-            self::resolve($initialValue)
+        $promise = Promise\resolve($initialValue);
+
+        foreach ($callables as $callable) {
+            $promise = $promise->then(static fn (mixed $value): PromiseInterface => Promise\resolve($callable($value)));
+        }
+
+        return Lifecycle::track($promise, 'waterfall');
+    }
+
+    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    public static function cancellable(PromiseInterface $promise, callable $onCancel): PromiseInterface
+    {
+        $cancelled = false;
+        $wrapped = new Promise\Promise(
+            static function (callable $resolve, callable $reject) use ($promise): void {
+                $promise->then($resolve, $reject);
+            },
+            static function () use (&$cancelled, $onCancel, $promise): void {
+                if ($cancelled) {
+                    return;
+                }
+                $cancelled = true;
+                $onCancel();
+                $promise->cancel();
+            }
         );
+
+        return Lifecycle::track($wrapped, 'cancellable');
     }
 
-    /**
-     * Create a cancellable promise.
-     *
-     * @template T
-     *
-     * @param  Promise\PromiseInterface<T>  $promise  The promise to make cancellable
-     * @param  callable(): void  $onCancel  Function to call on cancellation
-     * @return CancellablePromise<T> A cancellable promise wrapper
-     */
-    public static function cancellable(
-        Promise\PromiseInterface $promise,
-        callable $onCancel
-    ): CancellablePromise {
-        return new CancellablePromise($promise, $onCancel);
-    }
-
-    /**
-     * Add better error context to a promise.
-     *
-     * @template T
-     *
-     * @param  Promise\PromiseInterface<T>  $promise  The promise to enhance
-     * @param  string  $context  Additional context for errors
-     * @return Promise\PromiseInterface<T> Enhanced promise with better error handling
-     */
-    public static function withErrorContext(
-        Promise\PromiseInterface $promise,
-        string $context
-    ): Promise\PromiseInterface {
-        return $promise->then(
-            fn ($result) => $result,
-            function (\Throwable $error) use ($context) {
+    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    public static function withErrorContext(PromiseInterface $promise, string $context): PromiseInterface
+    {
+        $result = $promise->then(
+            static fn (mixed $value): mixed => $value,
+            static function (\Throwable $error) use ($context): never {
                 if ($error instanceof AsyncException) {
                     throw $error;
                 }
 
-                $wrappedError = new AsyncException(
-                    "{$context}: {$error->getMessage()}",
-                    $error->getCode(),
-                    $error
-                );
-
-                return self::reject($wrappedError);
+                throw new AsyncException("{$context}: {$error->getMessage()}", $error->getCode(), $error);
             }
         );
+
+        return Lifecycle::track($result, 'error_context');
     }
 
-    /**
-     * Create a rate-limited version of an async function.
-     *
-     * @template T
-     *
-     * @param callable(...mixed): Promise\PromiseInterface<T> $fn Function to rate limit
-     * @param  int  $maxCalls  Maximum calls per time period
-     * @param  float  $period  Time period in seconds
-     * @return callable(...mixed): Promise\PromiseInterface<T> Rate-limited function
-     */
-    public static function rateLimit(
-        callable $fn,
-        int $maxCalls,
-        float $period
-    ): callable {
-        $rateLimiter = RateLimiter::create($maxCalls, $period);
+    public static function rateLimit(callable $fn, int $maxCalls, float $period): callable
+    {
+        return RateLimiter::create($maxCalls, $period)->limit($fn);
+    }
 
-        return $rateLimiter->limit($fn);
+    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
+    private static function mapInternal(iterable $items, callable $callback, int $concurrency, ?callable $onProgress): PromiseInterface
+    {
+        $items = is_array($items) ? $items : iterator_to_array($items, true);
+
+        if ($items === []) {
+            return Promise\resolve([]);
+        }
+
+        $keys = array_keys($items);
+        $total = count($keys);
+        $position = 0;
+        $pending = 0;
+        $completed = 0;
+        $results = [];
+        $active = [];
+        $settled = false;
+        $scheduled = false;
+        $deferred = new Deferred(static function () use (&$settled, &$active): void {
+            $settled = true;
+
+            foreach ($active as $promise) {
+                $promise->cancel();
+            }
+            $active = [];
+        });
+
+        $schedule = null;
+        $pump = static function (): void {};
+        $fail = static function (\Throwable $error) use (&$settled, $deferred): void {
+            if (! $settled) {
+                $settled = true;
+                $deferred->reject($error);
+            }
+        };
+        $schedule = static function () use (&$schedule, &$scheduled, &$pump): void {
+            if ($scheduled) {
+                return;
+            }
+            $scheduled = true;
+            LoopManager::nextTick(static function () use (&$scheduled, &$pump): void {
+                $scheduled = false;
+                $pump();
+            });
+        };
+        $pump = static function () use ($schedule, &$settled, &$position, &$pending, &$completed, &$results, &$active, $items, $keys, $total, $concurrency, $callback, $onProgress, $deferred, $fail): void {
+            if ($settled) {
+                return;
+            }
+            $limit = $concurrency === 0 ? $total : $concurrency;
+
+            while (! $settled && $pending < $limit && $position < $total) {
+                $index = $position++;
+                $key = $keys[$index];
+
+                try {
+                    $promise = Promise\resolve($callback($items[$key]));
+                } catch (\Throwable $error) {
+                    $fail($error);
+
+                    return;
+                }
+                $active[$index] = $promise;
+                $pending++;
+                $promise->then(
+                    static function (mixed $value) use (&$pending, &$completed, &$results, &$active, $index, $key, $total, $onProgress, $schedule, $fail, &$settled): void {
+                        unset($active[$index]);
+                        $pending--;
+                        $completed++;
+                        $results[$key] = $value;
+
+                        if ($onProgress !== null) {
+                            try {
+                                $onProgress($completed, $total);
+                            } catch (\Throwable $error) {
+                                $fail($error);
+
+                                return;
+                            }
+                        }
+
+                        if (! $settled) {
+                            $schedule();
+                        }
+                    },
+                    static function (\Throwable $error) use ($fail): void {
+                        $fail($error);
+                    }
+                );
+            }
+
+            if (! $settled && $position >= $total && $pending === 0) {
+                $settled = true;
+                $deferred->resolve($results);
+            }
+        };
+        $schedule();
+
+        return $deferred->promise();
     }
 }

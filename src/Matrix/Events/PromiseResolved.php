@@ -9,6 +9,8 @@ namespace Matrix\Events;
  */
 class PromiseResolved extends Event
 {
+    public const NAME = 'promise.resolved';
+
     /**
      * Create a new PromiseResolved event.
      *
@@ -28,7 +30,7 @@ class PromiseResolved extends Event
      */
     public function getName(): string
     {
-        return 'promise.resolved';
+        return self::NAME;
     }
 
     /**
@@ -36,7 +38,9 @@ class PromiseResolved extends Event
      */
     public function getPromiseId(): string
     {
-        return $this->get('promise_id');
+        $id = $this->get('promise_id');
+
+        return is_string($id) ? $id : '';
     }
 
     /**
@@ -52,6 +56,15 @@ class PromiseResolved extends Event
      */
     public function getDuration(): float
     {
-        return $this->get('duration', 0.0);
+        $duration = $this->get('duration', 0.0);
+
+        return is_float($duration) || is_int($duration) ? (float) $duration : 0.0;
+    }
+
+    public function getOperationType(): string
+    {
+        $type = $this->get('operation_type', 'promise');
+
+        return is_string($type) ? $type : 'promise';
     }
 }

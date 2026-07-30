@@ -4,142 +4,135 @@ declare(strict_types=1);
 
 namespace Matrix\Promise;
 
-use Matrix\Async;
+use Matrix\Support\Lifecycle;
+use Matrix\Support\LoopManager;
+use React\Promise;
 use React\Promise\Deferred;
 use React\Promise\PromiseInterface;
 
-/**
- * A pool for controlling concurrent promise execution.
- *
- * @template T
- */
-class PromisePool
+/** @template T A keyed, fail-fast pool of promise-returning tasks. */
+final class PromisePool
 {
-    /**
-     * @var array<callable(): PromiseInterface<T>> Array of callables that return promises
-     */
+    /** @var array<array-key, callable(): mixed> */
     private array $tasks;
 
-    /**
-     * @var int Maximum number of concurrent promises
-     */
     private int $concurrency;
 
-    /**
-     * @var callable(int, int): void|null Progress callback
-     */
+    /** @var (callable(int, int): void)|null */
     private $progressCallback;
 
-    /**
-     * Create a new promise pool.
-     *
-     * @param  array<callable(): PromiseInterface<T>>  $tasks  Array of callables that return promises
-     * @param  int  $concurrency  Maximum number of concurrent promises
-     * @param  callable(int $done, int $total): void|null  $progressCallback  Optional progress callback
-     */
-    public function __construct(
-        array $tasks,
-        int $concurrency = 5,
-        ?callable $progressCallback = null
-    ) {
-        $this->tasks = $tasks;
-        $this->concurrency = max(1, $concurrency);
+    public function __construct(iterable $tasks, int $concurrency = 5, ?callable $progressCallback = null)
+    {
+        if ($concurrency < 1) {
+            throw new \InvalidArgumentException('Pool concurrency must be positive.');
+        }
+        /** @var array<array-key, callable(): mixed> $normalized */
+        $normalized = is_array($tasks) ? $tasks : iterator_to_array($tasks, true);
+        $this->tasks = $normalized;
+        $this->concurrency = $concurrency;
         $this->progressCallback = $progressCallback;
     }
 
-    /**
-     * Create and run a new promise pool.
-     *
-     * @template U
-     *
-     * @param  array<callable(): PromiseInterface<U>>  $tasks  Array of callables that return promises
-     * @param  int  $concurrency  Maximum number of concurrent promises
-     * @param  callable(int $done, int $total): void|null  $progressCallback  Optional progress callback
-     * @return PromiseInterface<array<U>> Promise that resolves with an array of results
-     */
-    public static function create(
-        array $tasks,
-        int $concurrency = 5,
-        ?callable $progressCallback = null
-    ): PromiseInterface {
+    public static function create(iterable $tasks, int $concurrency = 5, ?callable $progressCallback = null): PromiseInterface
+    {
         return (new self($tasks, $concurrency, $progressCallback))->run();
     }
 
-    /**
-     * Run the tasks in the pool.
-     *
-     * @return PromiseInterface<array<T>> Promise that resolves with an array of results
-     */
+    /** @return PromiseInterface<array<T>> */
     public function run(): PromiseInterface
     {
-        if (empty($this->tasks)) {
-            return Async::resolve([]);
+        if ($this->tasks === []) {
+            return Lifecycle::track(Promise\resolve([]), 'pool');
         }
 
-        $results = [];
-        $pending = 0;
+        $keys = array_keys($this->tasks);
+        $total = count($keys);
         $position = 0;
+        $pending = 0;
         $completed = 0;
-        $totalTasks = count($this->tasks);
-        $deferred = new Deferred;
+        $results = [];
+        $active = [];
+        $settled = false;
+        $scheduled = false;
+        $tasks = $this->tasks;
+        $concurrency = $this->concurrency;
+        $progressCallback = $this->progressCallback;
+        $deferred = new Deferred(static function () use (&$settled, &$active): void {
+            $settled = true;
 
-        $processNext = function () use (
-            &$pending,
-            &$position,
-            &$completed,
-            &$results,
-            $totalTasks,
-            $deferred,
-            &$processNext
-        ): void {
-            // All tasks done, resolve with results
-            if ($completed === $totalTasks) {
-                ksort($results);
-                $deferred->resolve($results);
+            foreach ($active as $promise) {
+                $promise->cancel();
+            }
+            $active = [];
+        });
 
+        $pump = static function (): void {};
+        $schedule = static function () use (&$scheduled, &$pump): void {
+            if ($scheduled) {
+                return;
+            }
+            $scheduled = true;
+            LoopManager::nextTick(static function () use (&$scheduled, &$pump): void {
+                $scheduled = false;
+                $pump();
+            });
+        };
+        $fail = static function (\Throwable $error) use (&$settled, $deferred): void {
+            if (! $settled) {
+                $settled = true;
+                $deferred->reject($error);
+            }
+        };
+        $pump = static function () use ($schedule, &$settled, &$position, &$pending, &$completed, &$results, &$active, $keys, $total, $deferred, $fail, $tasks, $concurrency, $progressCallback): void {
+            if ($settled) {
                 return;
             }
 
-            // Process more tasks if we're under concurrency limit
-            while ($pending < $this->concurrency && $position < $totalTasks) {
-                $idx = $position++;
-                $task = $this->tasks[$idx];
-                $pending++;
+            while (! $settled && $pending < $concurrency && $position < $total) {
+                $index = $position++;
+                $key = $keys[$index];
 
                 try {
-                    $task()->then(
-                        function ($result) use (
-                            $idx,
-                            &$results,
-                            &$pending,
-                            &$completed,
-                            $totalTasks,
-                            $processNext
-                        ): void {
-                            $results[$idx] = $result;
-                            $pending--;
-                            $completed++;
-
-                            if ($this->progressCallback !== null) {
-                                ($this->progressCallback)($completed, $totalTasks);
-                            }
-
-                            $processNext();
-                        },
-                        function ($reason) use ($deferred): void {
-                            $deferred->reject($reason);
-                        }
-                    );
-                } catch (\Throwable $e) {
-                    $deferred->reject($e);
+                    $promise = Promise\resolve(($tasks[$key])());
+                } catch (\Throwable $error) {
+                    $fail($error);
 
                     return;
                 }
+                $active[$index] = $promise;
+                $pending++;
+                $promise->then(
+                    static function (mixed $value) use (&$pending, &$completed, &$results, &$active, $index, $key, $total, $schedule, $fail, &$settled, $progressCallback): void {
+                        unset($active[$index]);
+                        $pending--;
+                        $completed++;
+                        $results[$key] = $value;
+
+                        if ($progressCallback !== null) {
+                            try {
+                                $progressCallback($completed, $total);
+                            } catch (\Throwable $error) {
+                                $fail($error);
+
+                                return;
+                            }
+                        }
+                        $schedule();
+                    },
+                    static function (\Throwable $error) use ($fail): void {
+                        $fail($error);
+                    }
+                );
+            }
+
+            if (! $settled && $position >= $total && $pending === 0) {
+                $settled = true;
+                $deferred->resolve($results);
             }
         };
 
-        Async::loop()->futureTick($processNext);
+        $schedule();
 
-        return $deferred->promise();
+        return Lifecycle::track($deferred->promise(), 'pool');
     }
 }

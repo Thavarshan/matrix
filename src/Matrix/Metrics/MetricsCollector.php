@@ -4,107 +4,70 @@ declare(strict_types=1);
 
 namespace Matrix\Metrics;
 
-/**
- * Metrics collector for tracking async operation performance.
- */
-class MetricsCollector
+/** Bounded in-memory metrics for Matrix operations. */
+final class MetricsCollector
 {
-    /**
-     * @var array<string, mixed> Active promises being tracked
-     */
+    private const DEFAULT_SAMPLE_LIMIT = 1024;
+
+    /** @var array<string, array{id: string, type: string, created_at: float, context: array<string, mixed>}> */
     private array $activePromises = [];
 
-    /**
-     * @var array<string, mixed> Completed promise metrics
-     */
-    private array $completedPromises = [];
-
-    /**
-     * @var array<string, int> Operation counters
-     */
+    /** @var array<string, int> */
     private array $counters = [];
 
-    /**
-     * @var array<string, float> Timing data
-     */
+    /** @var array<string, list<float>> */
     private array $timings = [];
 
-    /**
-     * @var bool Whether metrics collection is enabled
-     */
     private bool $enabled = true;
 
-    /**
-     * Track a promise creation.
-     *
-     * @param  array<string, mixed>  $context
-     */
+    private int $sampleLimit;
+
+    public function __construct(int $sampleLimit = self::DEFAULT_SAMPLE_LIMIT)
+    {
+        if ($sampleLimit < 1) {
+            throw new \InvalidArgumentException('Metrics sample limit must be positive.');
+        }
+        $this->sampleLimit = $sampleLimit;
+    }
+
+    /** @param array<string, mixed> $context */
     public function promiseCreated(string $promiseId, string $type = 'promise', array $context = []): void
     {
         if (! $this->enabled) {
             return;
         }
-
         $this->activePromises[$promiseId] = [
             'id'         => $promiseId,
             'type'       => $type,
             'created_at' => microtime(true),
             'context'    => $context,
         ];
-
         $this->incrementCounter('promises.created');
         $this->incrementCounter("promises.created.{$type}");
     }
 
-    /**
-     * Track a promise resolution.
-     */
     public function promiseResolved(string $promiseId, mixed $value = null): void
     {
         if (! $this->enabled || ! isset($this->activePromises[$promiseId])) {
             return;
         }
-
         $promise = $this->activePromises[$promiseId];
         $duration = microtime(true) - $promise['created_at'];
-
-        $this->completedPromises[$promiseId] = array_merge($promise, [
-            'resolved_at' => microtime(true),
-            'duration'    => $duration,
-            'status'      => 'resolved',
-            'value_type'  => gettype($value),
-        ]);
-
         unset($this->activePromises[$promiseId]);
-
         $this->incrementCounter('promises.resolved');
         $this->incrementCounter("promises.resolved.{$promise['type']}");
         $this->recordTiming('promise.duration', $duration);
         $this->recordTiming("promise.duration.{$promise['type']}", $duration);
     }
 
-    /**
-     * Track a promise rejection.
-     */
     public function promiseRejected(string $promiseId, \Throwable $reason): void
     {
         if (! $this->enabled || ! isset($this->activePromises[$promiseId])) {
             return;
         }
-
         $promise = $this->activePromises[$promiseId];
         $duration = microtime(true) - $promise['created_at'];
-
-        $this->completedPromises[$promiseId] = array_merge($promise, [
-            'rejected_at'   => microtime(true),
-            'duration'      => $duration,
-            'status'        => 'rejected',
-            'error_class'   => get_class($reason),
-            'error_message' => $reason->getMessage(),
-        ]);
-
         unset($this->activePromises[$promiseId]);
-
         $this->incrementCounter('promises.rejected');
         $this->incrementCounter("promises.rejected.{$promise['type']}");
         $this->incrementCounter('errors.' . get_class($reason));
@@ -112,38 +75,25 @@ class MetricsCollector
         $this->recordTiming("promise.duration.{$promise['type']}", $duration);
     }
 
-    /**
-     * Track a promise timeout.
-     */
     public function promiseTimeout(string $promiseId, float $timeoutDuration): void
     {
         if (! $this->enabled) {
             return;
         }
-
         $this->incrementCounter('promises.timeout');
         $this->recordTiming('promise.timeout.duration', $timeoutDuration);
     }
 
-    /**
-     * Get the number of active promises.
-     */
     public function getActivePromiseCount(): int
     {
         return count($this->activePromises);
     }
 
-    /**
-     * Get the total number of completed promises.
-     */
     public function getCompletedPromiseCount(): int
     {
-        return count($this->completedPromises);
+        return $this->getCounter('promises.resolved') + $this->getCounter('promises.rejected');
     }
 
-    /**
-     * Get the success rate as a percentage.
-     */
     public function getSuccessRate(): float
     {
         $resolved = $this->getCounter('promises.resolved');
@@ -153,21 +103,15 @@ class MetricsCollector
         return $total > 0 ? ($resolved / $total) * 100 : 0.0;
     }
 
-    /**
-     * Get the average promise resolution time in seconds.
-     */
     public function getAverageResolutionTime(): float
     {
+        /** @var list<float> $timings */
         $timings = $this->timings['promise.duration'] ?? [];
 
-        return count($timings) > 0 ? array_sum($timings) / count($timings) : 0.0;
+        return $timings === [] ? 0.0 : array_sum($timings) / count($timings);
     }
 
-    /**
-     * Get all metrics data.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function getMetrics(): array
     {
         return [
@@ -180,88 +124,65 @@ class MetricsCollector
         ];
     }
 
-    /**
-     * Get a specific counter value.
-     */
     public function getCounter(string $key): int
     {
         return $this->counters[$key] ?? 0;
     }
 
-    /**
-     * Reset all metrics.
-     */
     public function reset(): void
     {
         $this->activePromises = [];
-        $this->completedPromises = [];
         $this->counters = [];
         $this->timings = [];
     }
 
-    /**
-     * Enable or disable metrics collection.
-     */
     public function setEnabled(bool $enabled): void
     {
         $this->enabled = $enabled;
     }
 
-    /**
-     * Check if metrics collection is enabled.
-     */
     public function isEnabled(): bool
     {
         return $this->enabled;
     }
 
-    /**
-     * Increment a counter.
-     */
     private function incrementCounter(string $key, int $amount = 1): void
     {
         $this->counters[$key] = ($this->counters[$key] ?? 0) + $amount;
     }
 
-    /**
-     * Record a timing value.
-     */
     private function recordTiming(string $key, float $value): void
     {
-        if (! isset($this->timings[$key])) {
-            $this->timings[$key] = [];
-        }
-
+        $this->timings[$key] ??= [];
         $this->timings[$key][] = $value;
+
+        if (count($this->timings[$key]) > $this->sampleLimit) {
+            array_shift($this->timings[$key]);
+        }
     }
 
-    /**
-     * Get timing summary statistics.
-     *
-     * @return array<string, array<string, float>>
-     */
+    /** @return array<string, array<string, float>> */
     private function getTimingSummary(): array
     {
         $summary = [];
 
         foreach ($this->timings as $key => $values) {
-            if (empty($values)) {
+            if ($values === []) {
                 continue;
             }
-
             sort($values);
             $count = count($values);
             $sum = array_sum($values);
-
+            $percentile = static fn (float $p): float => $values[max(0, (int) ceil($p * $count) - 1)];
             $summary[$key] = [
                 'count' => $count,
                 'sum'   => $sum,
                 'avg'   => $sum / $count,
                 'min'   => $values[0],
                 'max'   => $values[$count - 1],
-                'p50'   => $values[intval($count * 0.5)],
-                'p95'   => $values[intval($count * 0.95)],
-                'p99'   => $values[intval($count * 0.99)],
+                'p50'   => $percentile(0.50),
+                'p95'   => $percentile(0.95),
+                'p99'   => $percentile(0.99),
             ];
         }
 

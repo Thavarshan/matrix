@@ -1,14 +1,17 @@
-includes:
-    - ./vendor/larastan/larastan/extension.neon
-
 parameters:
-
+    level: max
     paths:
-        - src/Matrix
-
-    level: 4
-
-    excludePaths:
-
-    checkMissingIterableValueType: false
-    treatPhpDocTypesAsCertain: false
+        - src
+        - tests
+    treatPhpDocTypesAsCertain: true
+    ignoreErrors:
+        - identifier: missingType.generics
+        - identifier: missingType.iterableValue
+        - identifier: arrayValues.list
+        - identifier: foreach.emptyArray
+        - identifier: closure.unusedUse
+        - identifier: expr.resultUnused
+        - identifier: booleanNot.alwaysTrue
+        - identifier: argument.type
+        - identifier: offsetAccess.nonOffsetAccessible
+        - identifier: method.nonObject

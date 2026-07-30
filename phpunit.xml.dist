@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<phpunit backupGlobals="false"
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/12.0/phpunit.xsd"
+    backupGlobals="false"
     beStrictAboutTestsThatDoNotTestAnything="false"
     colors="true"
     processIsolation="false"
     stopOnError="false"
     stopOnFailure="false"
+    failOnRisky="true"
+    failOnWarning="true"
     cacheDirectory=".phpunit.cache"
     backupStaticProperties="false">
     <testsuites>

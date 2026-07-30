@@ -9,6 +9,8 @@ namespace Matrix\Events;
  */
 class PromiseCreated extends Event
 {
+    public const NAME = 'promise.created';
+
     /**
      * Create a new PromiseCreated event.
      *
@@ -27,7 +29,7 @@ class PromiseCreated extends Event
      */
     public function getName(): string
     {
-        return 'promise.created';
+        return self::NAME;
     }
 
     /**
@@ -35,7 +37,9 @@ class PromiseCreated extends Event
      */
     public function getPromiseId(): string
     {
-        return $this->get('promise_id');
+        $id = $this->get('promise_id');
+
+        return is_string($id) ? $id : '';
     }
 
     /**
@@ -43,6 +47,13 @@ class PromiseCreated extends Event
      */
     public function getType(): string
     {
-        return $this->get('type', 'promise');
+        $type = $this->get('type', 'promise');
+
+        return is_string($type) ? $type : 'promise';
+    }
+
+    public function getOperationType(): string
+    {
+        return $this->getType();
     }
 }
