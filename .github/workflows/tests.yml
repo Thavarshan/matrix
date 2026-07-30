@@ -50,6 +50,7 @@ jobs:
           php-version: '8.3'
           coverage: none
       - run: composer validate --strict
-      - run: composer audit --locked --no-interaction
+      - run: composer install --no-dev --no-interaction --no-progress --prefer-dist
+      - run: composer audit --no-interaction
       - run: composer archive --no-interaction --format=tar
       - run: tar -tf jerome-matrix-*.tar | grep -E '(^|/)(composer.json|README.md|UPGRADING.md|src/)'
