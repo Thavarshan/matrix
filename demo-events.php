@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 /**
- * Matrix v3.4.0 Event System & Metrics Demo
+ * Matrix v4.0 Event System & Metrics Demo
  *
  * This script demonstrates the new event-driven observability features
- * introduced in Matrix v3.4.0.
+ * introduced in Matrix v4.0.
  */
 
 require_once __DIR__ . '/vendor/autoload.php';
@@ -17,7 +17,7 @@ use function Matrix\Support\getMetrics;
 use function Matrix\Support\listen;
 use function Matrix\Support\timeout;
 
-echo "🚀 Matrix v3.4.0 Event System & Metrics Demo\n";
+echo "🚀 Matrix v4.0 Event System & Metrics Demo\n";
 echo '=' . str_repeat('=', 45) . "\n\n";
 
 // Set up event listeners for demonstration
@@ -62,13 +62,13 @@ for ($i = 1; $i <= 2; $i++) {
     try {
         await(async(function () use ($i) {
             if ($i === 2) {
-                throw new \Exception("Simulated error in task {$i}");
+                throw new Exception("Simulated error in task {$i}");
             }
             usleep(20000); // 20ms
 
             return "Task {$i} completed";
         }));
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         // Expected for task 2
     }
 }
@@ -86,7 +86,7 @@ try {
         0.1, // 100ms timeout
         'Custom timeout message'
     ));
-} catch (\Exception $e) {
+} catch (Exception $e) {
     echo "Caught timeout exception: {$e->getMessage()}\n";
 }
 
@@ -120,7 +120,7 @@ if (! empty($metrics['timings'])) {
     }
 }
 
-echo "\n🎉 Demo completed! Matrix v3.4.0 provides powerful observability for your async operations.\n";
+echo "\n🎉 Demo completed! Matrix v4.0 provides lifecycle events and bounded metrics.\n";
 echo "\nKey benefits:\n";
 echo "  ✓ Real-time event monitoring\n";
 echo "  ✓ Performance metrics collection\n";

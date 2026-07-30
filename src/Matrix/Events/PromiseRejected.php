@@ -9,6 +9,8 @@ namespace Matrix\Events;
  */
 class PromiseRejected extends Event
 {
+    public const NAME = 'promise.rejected';
+
     /**
      * Create a new PromiseRejected event.
      *
@@ -30,7 +32,7 @@ class PromiseRejected extends Event
      */
     public function getName(): string
     {
-        return 'promise.rejected';
+        return self::NAME;
     }
 
     /**
@@ -38,7 +40,9 @@ class PromiseRejected extends Event
      */
     public function getPromiseId(): string
     {
-        return $this->get('promise_id');
+        $id = $this->get('promise_id');
+
+        return is_string($id) ? $id : '';
     }
 
     /**
@@ -46,7 +50,13 @@ class PromiseRejected extends Event
      */
     public function getReason(): \Throwable
     {
-        return $this->get('reason');
+        $reason = $this->get('reason');
+
+        if (! $reason instanceof \Throwable) {
+            throw new \UnexpectedValueException('Promise rejection reason is not a Throwable.');
+        }
+
+        return $reason;
     }
 
     /**
@@ -54,7 +64,9 @@ class PromiseRejected extends Event
      */
     public function getDuration(): float
     {
-        return $this->get('duration', 0.0);
+        $duration = $this->get('duration', 0.0);
+
+        return is_float($duration) || is_int($duration) ? (float) $duration : 0.0;
     }
 
     /**
@@ -62,7 +74,9 @@ class PromiseRejected extends Event
      */
     public function getErrorMessage(): string
     {
-        return $this->get('error_message', '');
+        $message = $this->get('error_message', '');
+
+        return is_string($message) ? $message : '';
     }
 
     /**
@@ -70,6 +84,15 @@ class PromiseRejected extends Event
      */
     public function getErrorClass(): string
     {
-        return $this->get('error_class', '');
+        $class = $this->get('error_class', '');
+
+        return is_string($class) ? $class : '';
+    }
+
+    public function getOperationType(): string
+    {
+        $type = $this->get('operation_type', 'promise');
+
+        return is_string($type) ? $type : 'promise';
     }
 }

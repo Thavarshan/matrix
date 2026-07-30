@@ -1,44 +1,56 @@
 name: Tests
 
+on:
+  push:
+  pull_request:
+
 permissions:
   contents: read
 
-on:
-  push:
-    branches:
-      - main
-      - refactor/**
-      - feature/**
-      - fix/**
-
 jobs:
   test:
+    name: PHP ${{ matrix.php }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        php: [8.3, 8.4]
-        stability: [prefer-stable]
-
-    name: PHP ${{ matrix.php }} on ${{ matrix.os }} - ${{ matrix.stability }}
-
+        include:
+          - { os: ubuntu-latest, php: '8.3' }
+          - { os: ubuntu-latest, php: '8.4' }
+          - { os: ubuntu-latest, php: '8.5' }
+          - { os: windows-latest, php: '8.5' }
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: curl, mbstring, json, openssl
           coverage: none
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: composer check
 
-      - name: Install dependencies
-        run: |
-          composer install --no-interaction --no-progress --no-suggest
-          composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+  lowest:
+    name: PHP 8.3 lowest dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer update --prefer-lowest --prefer-dist --no-interaction
+      - run: composer test
 
-      - name: Execute tests
-        run: composer test
+  package:
+    name: Composer validation and archive smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer validate --strict
+      - run: composer install --no-dev --no-interaction --no-progress --prefer-dist
+      - run: composer audit --no-interaction
+      - run: composer archive --no-interaction --format=tar
+      - run: tar -tf jerome-matrix-*.tar | grep -E '(^|/)(composer.json|README.md|UPGRADING.md|src/)'

@@ -1,6 +1,6 @@
 {
     "name": "jerome/matrix",
-    "description": "An unparalleled PHP asynchronous experience, offering genuine concurrency and fiber-based task management.",
+    "description": "Event-driven asynchronous helpers and concurrency control for ReactPHP.",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -16,23 +16,13 @@
     },
     "require": {
         "php": "^8.3",
-        "ext-pcntl": "*",
-        "ext-posix": "*",
-        "react/event-loop": "^1.5",
-        "react/promise": "^3.2"
+        "react/event-loop": "^1.6",
+        "react/promise": "^3.3"
     },
     "require-dev": {
-        "friendsofphp/php-cs-fixer": "^3.65",
-        "guzzlehttp/guzzle": "^7.0",
-        "laravel/pint": "^1.18",
-        "mockery/mockery": "^1.6",
-        "php-mock/php-mock": "^2.5",
-        "php-mock/php-mock-mockery": "^1.4",
-        "phpstan/phpstan": "^1.11.5",
-        "phpunit/phpunit": "^11.5",
-        "squizlabs/php_codesniffer": "^3.11",
-        "symfony/var-dumper": "^7.2",
-        "tightenco/duster": "^3.2"
+        "laravel/pint": "^1.30",
+        "phpstan/phpstan": "^2.2",
+        "phpunit/phpunit": "^12.5"
     },
     "autoload": {
         "psr-4": {
@@ -48,21 +38,20 @@
         }
     },
     "scripts": {
-        "lint": "chmod +x bin/lint.sh && ./bin/lint.sh",
-        "fix": "chmod +x bin/fix.sh && ./bin/fix.sh",
-        "test": "chmod +x bin/test.sh && ./bin/test.sh"
+        "lint": "pint --test",
+        "fix": "pint",
+        "analyse": "phpstan analyse --level=max src tests",
+        "test": "phpunit",
+        "check": [
+            "@composer validate --strict",
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
     },
     "config": {
         "sort-packages": true,
-        "allow-plugins": {
-            "composer/package-versions-deprecated": true,
-            "php-http/discovery": true,
-            "dealerdirect/phpcodesniffer-composer-installer": true,
-            "pestphp/pest-plugin": true
-        },
         "optimize-autoloader": true,
         "preferred-install": "dist"
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    }
 }

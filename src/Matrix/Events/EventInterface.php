@@ -14,6 +14,8 @@ interface EventInterface
      */
     public function getName(): string;
 
+    public function getOperationType(): string;
+
     /**
      * Get the event timestamp.
      */

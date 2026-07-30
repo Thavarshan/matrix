@@ -38,6 +38,13 @@ abstract class Event implements EventInterface
         return $this->timestamp;
     }
 
+    public function getOperationType(): string
+    {
+        $type = $this->data['operation_type'] ?? 'event';
+
+        return is_string($type) ? $type : 'event';
+    }
+
     /**
      * Get event data.
      *
