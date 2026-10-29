@@ -60,7 +60,7 @@ jobs:
           test -n "$archive"
           mkdir -p "$RUNNER_TEMP/matrix-package" "$RUNNER_TEMP/matrix-consumer"
           tar -xf "$archive" -C "$RUNNER_TEMP/matrix-package"
-          for required in composer.json LICENSE README.md src/Matrix/Async.php src/Matrix/Support/helpers.php; do
+          for required in composer.json LICENSE README.md CHANGELOG.md src/Matrix/Async.php src/Matrix/Support/helpers.php; do
             test -f "$RUNNER_TEMP/matrix-package/$required"
           done
           cat > "$RUNNER_TEMP/matrix-consumer/composer.json" <<'JSON'
