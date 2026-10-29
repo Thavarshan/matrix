@@ -21,18 +21,21 @@ final class Lifecycle
         return 'promise_' . bin2hex(random_bytes(12));
     }
 
-    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    /**
+     * @param  PromiseInterface<mixed>  $promise
+     * @return PromiseInterface<mixed>
+     */
     public static function track(PromiseInterface $promise, string $type, ?string $id = null): PromiseInterface
     {
         $id ??= self::id();
-        $startedAt = microtime(true);
+        $startedAt = hrtime(true);
 
         Async::eventDispatcher()->dispatch(new PromiseCreated($id, $type));
         Async::metricsCollector()->promiseCreated($id, $type);
 
         return $promise->then(
             function (mixed $value) use ($id, $type, $startedAt): mixed {
-                $duration = microtime(true) - $startedAt;
+                $duration = (hrtime(true) - $startedAt) / 1e9;
                 Async::eventDispatcher()->dispatch(new PromiseResolved($id, $value, $duration, [
                     'operation_type' => $type,
                 ]));
@@ -41,7 +44,7 @@ final class Lifecycle
                 return $value;
             },
             function (\Throwable $reason) use ($id, $type, $startedAt): never {
-                $duration = microtime(true) - $startedAt;
+                $duration = (hrtime(true) - $startedAt) / 1e9;
                 Async::eventDispatcher()->dispatch(new PromiseRejected($id, $reason, $duration, [
                     'operation_type' => $type,
                 ]));

@@ -4,14 +4,3 @@ parameters:
         - src
         - tests
     treatPhpDocTypesAsCertain: true
-    ignoreErrors:
-        - identifier: missingType.generics
-        - identifier: missingType.iterableValue
-        - identifier: arrayValues.list
-        - identifier: foreach.emptyArray
-        - identifier: closure.unusedUse
-        - identifier: expr.resultUnused
-        - identifier: booleanNot.alwaysTrue
-        - identifier: argument.type
-        - identifier: offsetAccess.nonOffsetAccessible
-        - identifier: method.nonObject

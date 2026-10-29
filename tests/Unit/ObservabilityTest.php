@@ -21,6 +21,7 @@ final class ObservabilityTest extends TestCase
     protected function setUp(): void
     {
         Async::eventDispatcher()->clear();
+        Async::eventDispatcher()->setErrorHandler(null);
         Async::metricsCollector()->reset();
         Async::metricsCollector()->setEnabled(true);
     }
@@ -28,10 +29,10 @@ final class ObservabilityTest extends TestCase
     public function test_lifecycle_events_share_an_operation_type(): void
     {
         $events = [];
-        Async::eventDispatcher()->listen(PromiseCreated::NAME, static function ($event) use (&$events): void {
+        Async::eventDispatcher()->listen(PromiseCreated::NAME, static function (PromiseCreated $event) use (&$events): void {
             $events[] = $event;
         });
-        Async::eventDispatcher()->listen(PromiseResolved::NAME, static function ($event) use (&$events): void {
+        Async::eventDispatcher()->listen(PromiseResolved::NAME, static function (PromiseResolved $event) use (&$events): void {
             $events[] = $event;
         });
 
@@ -49,7 +50,6 @@ final class ObservabilityTest extends TestCase
 
         try {
             await(async(static fn (): never => throw new RuntimeException('operation')));
-            self::fail('Expected operation failure.');
         } catch (RuntimeException $exception) {
             self::assertSame('operation', $exception->getMessage());
         }
@@ -68,5 +68,47 @@ final class ObservabilityTest extends TestCase
         self::assertSame(5, $data['completed_promises']);
         self::assertSame(5, $data['counters']['promises.resolved']);
         self::assertSame(3, $data['timings']['promise.duration']['count']);
+    }
+
+    public function test_disabling_metrics_does_not_leave_active_promises(): void
+    {
+        $metrics = new MetricsCollector;
+        $metrics->promiseCreated('work', 'map');
+        $metrics->setEnabled(false);
+        $metrics->promiseResolved('work');
+        $metrics->promiseCreated('failed', 'pool');
+        $metrics->promiseRejected('failed', new RuntimeException('failed'));
+        $metrics->setEnabled(true);
+
+        self::assertSame(0, $metrics->getActivePromiseCount());
+        self::assertSame(0, $metrics->getCompletedPromiseCount());
+    }
+
+    public function test_unknown_operation_types_are_grouped(): void
+    {
+        $metrics = new MetricsCollector(1);
+
+        for ($i = 0; $i < 100; $i++) {
+            $id = 'id-' . $i;
+            $metrics->promiseCreated($id, 'tenant-' . $i);
+            $metrics->promiseResolved($id);
+        }
+
+        self::assertSame(100, $metrics->getCounter('promises.created.other'));
+        self::assertCount(2, $metrics->getMetrics()['timings']);
+    }
+
+    public function test_listener_error_handler_isolated_from_operation(): void
+    {
+        $reported = [];
+        Async::eventDispatcher()->setErrorHandler(static function (\Throwable $error) use (&$reported): void {
+            $reported[] = $error->getMessage();
+        });
+        Async::eventDispatcher()->listen(PromiseResolved::NAME, static function (): never {
+            throw new RuntimeException('observer broke');
+        });
+
+        self::assertSame('value', await(async(static fn (): string => 'value')));
+        self::assertContains('observer broke', $reported);
     }
 }

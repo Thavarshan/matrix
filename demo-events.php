@@ -1,57 +1,50 @@
+
 <?php
 
 declare(strict_types=1);
 
 /**
- * Matrix v4.0 Event System & Metrics Demo
+ * Matrix 4.0 Event System & Metrics Demo
  *
- * This script demonstrates the new event-driven observability features
- * introduced in Matrix v4.0.
+ * This script demonstrates the lifecycle events and metrics introduced in Matrix 3.4.
  */
 
 require_once __DIR__ . '/vendor/autoload.php';
 
 use function Matrix\Support\async;
 use function Matrix\Support\await;
+use function Matrix\Support\delay;
 use function Matrix\Support\getMetrics;
 use function Matrix\Support\listen;
+use function Matrix\Support\map;
 use function Matrix\Support\timeout;
 
-echo "🚀 Matrix v4.0 Event System & Metrics Demo\n";
+echo "Matrix 4.0 Event System & Metrics Demo\n";
 echo '=' . str_repeat('=', 45) . "\n\n";
 
 // Set up event listeners for demonstration
 listen('promise.created', function ($event) {
-    echo "📦 Promise created: {$event->getPromiseId()} (type: {$event->getType()})\n";
+    echo "Promise created: {$event->getPromiseId()} (type: {$event->getType()})\n";
 });
 
 listen('promise.resolved', function ($event) {
     $duration = round($event->getDuration() * 1000, 2); // Convert to milliseconds
-    echo "✅ Promise resolved: {$event->getPromiseId()} in {$duration}ms\n";
+    echo "Promise resolved: {$event->getPromiseId()} in {$duration}ms\n";
 });
 
 listen('promise.rejected', function ($event) {
     $duration = round($event->getDuration() * 1000, 2);
-    echo "❌ Promise rejected: {$event->getPromiseId()} in {$duration}ms - {$event->getErrorMessage()}\n";
+    echo "Promise rejected: {$event->getPromiseId()} in {$duration}ms - {$event->getErrorMessage()}\n";
 });
 
 listen('promise.timeout', function ($event) {
-    echo "⏱️  Promise timeout: {$event->getPromiseId()} after {$event->getTimeoutDuration()}s\n";
+    echo "Promise timeout: {$event->getPromiseId()} after {$event->getTimeoutDuration()}s\n";
 });
 
 echo "1. Running successful async operations...\n";
 
 // Execute some successful operations
-$results = [];
-
-for ($i = 1; $i <= 3; $i++) {
-    $results[] = await(async(function () use ($i) {
-        // Simulate different work durations
-        usleep(rand(10000, 50000)); // 10-50ms
-
-        return "Task {$i} completed";
-    }));
-}
+$results = await(map([1, 2, 3], static fn (int $i) => delay($i * 0.01, "Task {$i} completed"), 3));
 
 echo "\nResults: " . implode(', ', $results) . "\n\n";
 
@@ -64,9 +57,8 @@ for ($i = 1; $i <= 2; $i++) {
             if ($i === 2) {
                 throw new Exception("Simulated error in task {$i}");
             }
-            usleep(20000); // 20ms
 
-            return "Task {$i} completed";
+            return delay(0.02, "Task {$i} completed");
         }));
     } catch (Exception $e) {
         // Expected for task 2
@@ -78,13 +70,9 @@ echo "\n3. Demonstrating timeout events...\n";
 // Demonstrate timeout
 try {
     await(timeout(
-        async(function () {
-            usleep(200000); // 200ms - will timeout
-
-            return 'This should timeout';
-        }),
+        delay(0.2, 'This should time out'),
         0.1, // 100ms timeout
-        'Custom timeout message'
+        'Custom timeout message',
     ));
 } catch (Exception $e) {
     echo "Caught timeout exception: {$e->getMessage()}\n";
@@ -95,20 +83,20 @@ echo str_repeat('-', 30) . "\n";
 
 $metrics = getMetrics();
 
-echo "📊 Performance Metrics:\n";
+echo "Performance Metrics:\n";
 echo "  Active promises: {$metrics['active_promises']}\n";
 echo "  Completed promises: {$metrics['completed_promises']}\n";
 echo '  Success rate: ' . round($metrics['success_rate'], 2) . "%\n";
 echo '  Average resolution time: ' . round($metrics['average_resolution_time'] * 1000, 2) . "ms\n\n";
 
-echo "📈 Operation Counters:\n";
+echo "Operation Counters:\n";
 
 foreach ($metrics['counters'] as $key => $count) {
     echo "  {$key}: {$count}\n";
 }
 
 if (! empty($metrics['timings'])) {
-    echo "\n⏱️  Timing Statistics:\n";
+    echo "\nTiming Statistics:\n";
 
     foreach ($metrics['timings'] as $operation => $stats) {
         echo "  {$operation}:\n";
@@ -120,10 +108,10 @@ if (! empty($metrics['timings'])) {
     }
 }
 
-echo "\n🎉 Demo completed! Matrix v4.0 provides lifecycle events and bounded metrics.\n";
+echo "\nDemo completed! Matrix 4.0 provides lifecycle events and bounded metrics.\n";
 echo "\nKey benefits:\n";
-echo "  ✓ Real-time event monitoring\n";
-echo "  ✓ Performance metrics collection\n";
-echo "  ✓ Error tracking and classification\n";
-echo "  ✓ Debugging and profiling capabilities\n";
-echo "  ✓ Zero-configuration setup\n";
+echo "  - Real-time event monitoring\n";
+echo "  - Performance metrics collection\n";
+echo "  - Error tracking and classification\n";
+echo "  - Debugging and profiling capabilities\n";
+echo "  - Zero-configuration setup\n";

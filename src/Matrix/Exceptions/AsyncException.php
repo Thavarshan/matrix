@@ -23,4 +23,27 @@ class AsyncException extends RuntimeException
     {
         parent::__construct($message, $code, $previous);
     }
+
+    public function withContext(string $context): static
+    {
+        // Exceptions cannot be cloned. Copy the existing subtype and its metadata
+        // without invoking an unknown subclass constructor.
+        $class = new \ReflectionObject($this);
+        $copy = $class->newInstanceWithoutConstructor();
+        do {
+            foreach ($class->getProperties() as $property) {
+                if ($property->getDeclaringClass()->getName() !== $class->getName()
+                    || $property->isStatic() || ! $property->isInitialized($this)) {
+                    continue;
+                }
+                $property->setValue($copy, $property->getValue($this));
+            }
+            $class = $class->getParentClass();
+        } while ($class !== false);
+
+        (new \ReflectionProperty(\Exception::class, 'message'))->setValue($copy, $context . ': ' . $this->getMessage());
+        (new \ReflectionProperty(\Exception::class, 'previous'))->setValue($copy, $this);
+
+        return $copy;
+    }
 }

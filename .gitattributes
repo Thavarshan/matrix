@@ -28,3 +28,8 @@
 /.phpvmrc export-ignore
 /.editorconfig export-ignore
 /.env export-ignore
+/vendor export-ignore
+/.phpunit.cache export-ignore
+/composer.lock export-ignore
+/assets export-ignore
+/demo-events.php export-ignore

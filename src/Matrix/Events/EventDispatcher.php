@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Matrix\Events;
 
+use Throwable;
+
 /**
  * Event dispatcher for managing listeners and firing events.
  */
@@ -18,6 +20,9 @@ class EventDispatcher
      * @var bool Whether events are enabled
      */
     private bool $enabled = true;
+
+    /** @var (callable(Throwable, EventInterface): void)|null */
+    private $errorHandler = null;
 
     /**
      * Register an event listener.
@@ -40,10 +45,10 @@ class EventDispatcher
             return;
         }
 
-        $this->listeners[$eventName] = array_filter(
+        $this->listeners[$eventName] = array_values(array_filter(
             $this->listeners[$eventName],
             fn ($l) => $l !== $listener
-        );
+        ));
     }
 
     /**
@@ -78,9 +83,14 @@ class EventDispatcher
         foreach ($listeners as $listener) {
             try {
                 $listener($event);
-            } catch (\Throwable $e) {
-                // Silently ignore listener exceptions to prevent breaking the main flow
-                // In production, you might want to log these errors
+            } catch (Throwable $e) {
+                if ($this->errorHandler !== null) {
+                    try {
+                        ($this->errorHandler)($e, $event);
+                    } catch (Throwable) {
+                        // Reporting failures are isolated just like listener failures.
+                    }
+                }
             }
         }
     }
@@ -117,6 +127,12 @@ class EventDispatcher
     public function setEnabled(bool $enabled): void
     {
         $this->enabled = $enabled;
+    }
+
+    /** @param (callable(Throwable, EventInterface): void)|null $handler */
+    public function setErrorHandler(?callable $handler): void
+    {
+        $this->errorHandler = $handler;
     }
 
     /**

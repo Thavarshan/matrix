@@ -9,6 +9,20 @@ final class MetricsCollector
 {
     private const DEFAULT_SAMPLE_LIMIT = 1024;
 
+    /** @var list<string> */
+    private const OPERATION_TYPES = [
+        'all', 'any', 'batch', 'cancellable', 'coro', 'delay', 'error_context',
+        'map', 'pool', 'promise', 'race', 'rate_limit', 'reject', 'resolve',
+        'retry', 'timeout', 'waterfall', 'other',
+    ];
+
+    /** @var list<string> */
+    private const ERROR_TYPES = [
+        'AsyncException', 'CancellationException', 'InvalidArgumentException',
+        'LogicException', 'RuntimeException', 'RetryException', 'TimeoutException',
+        'UnexpectedValueException',
+    ];
+
     /** @var array<string, array{id: string, type: string, created_at: float, context: array<string, mixed>}> */
     private array $activePromises = [];
 
@@ -36,10 +50,11 @@ final class MetricsCollector
         if (! $this->enabled) {
             return;
         }
+        $type = in_array($type, self::OPERATION_TYPES, true) ? $type : 'other';
         $this->activePromises[$promiseId] = [
             'id'         => $promiseId,
             'type'       => $type,
-            'created_at' => microtime(true),
+            'created_at' => hrtime(true),
             'context'    => $context,
         ];
         $this->incrementCounter('promises.created');
@@ -48,12 +63,16 @@ final class MetricsCollector
 
     public function promiseResolved(string $promiseId, mixed $value = null): void
     {
-        if (! $this->enabled || ! isset($this->activePromises[$promiseId])) {
+        if (! isset($this->activePromises[$promiseId])) {
             return;
         }
         $promise = $this->activePromises[$promiseId];
-        $duration = microtime(true) - $promise['created_at'];
+        $duration = (hrtime(true) - $promise['created_at']) / 1e9;
         unset($this->activePromises[$promiseId]);
+
+        if (! $this->enabled) {
+            return;
+        }
         $this->incrementCounter('promises.resolved');
         $this->incrementCounter("promises.resolved.{$promise['type']}");
         $this->recordTiming('promise.duration', $duration);
@@ -62,15 +81,21 @@ final class MetricsCollector
 
     public function promiseRejected(string $promiseId, \Throwable $reason): void
     {
-        if (! $this->enabled || ! isset($this->activePromises[$promiseId])) {
+        if (! isset($this->activePromises[$promiseId])) {
             return;
         }
         $promise = $this->activePromises[$promiseId];
-        $duration = microtime(true) - $promise['created_at'];
+        $duration = (hrtime(true) - $promise['created_at']) / 1e9;
         unset($this->activePromises[$promiseId]);
+
+        if (! $this->enabled) {
+            return;
+        }
         $this->incrementCounter('promises.rejected');
         $this->incrementCounter("promises.rejected.{$promise['type']}");
-        $this->incrementCounter('errors.' . get_class($reason));
+        $errorType = $this->throwableType($reason);
+        $errorType = in_array($errorType, self::ERROR_TYPES, true) ? $errorType : 'other';
+        $this->incrementCounter('errors.' . $errorType);
         $this->recordTiming('promise.duration', $duration);
         $this->recordTiming("promise.duration.{$promise['type']}", $duration);
     }
@@ -111,7 +136,16 @@ final class MetricsCollector
         return $timings === [] ? 0.0 : array_sum($timings) / count($timings);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array{
+     *     active_promises: int,
+     *     completed_promises: int,
+     *     success_rate: float,
+     *     average_resolution_time: float,
+     *     counters: array<string, int>,
+     *     timings: array<string, array{count: int, sum: float, avg: float, min: float, max: float, p50: float, p95: float, p99: float}>
+     * }
+     */
     public function getMetrics(): array
     {
         return [
@@ -161,7 +195,17 @@ final class MetricsCollector
         }
     }
 
-    /** @return array<string, array<string, float>> */
+    private function throwableType(\Throwable $reason): string
+    {
+        $class = get_class($reason);
+        $separator = strrpos($class, '\\');
+
+        return $separator === false ? $class : substr($class, $separator + 1);
+    }
+
+    /**
+     * @return array<string, array{count: int, sum: float, avg: float, min: float, max: float, p50: float, p95: float, p99: float}>
+     */
     private function getTimingSummary(): array
     {
         $summary = [];

@@ -1,7 +1,3 @@
-# Support Questions
+# Support
 
-GitHub issue trackers are not intended to provide help or support. Instead, use one of the following channels:
-
-- [Twitter](https://twitter.com/tjthavarshan)
-- [Github discussions](https://github.com/Thavarshan/matrix/issues)
-- [API reference](https://github.com/Thavarshan/matrix/wiki/API-Reference-for-the-Filter-Class)
+See the [support guidance in the README](https://github.com/Thavarshan/matrix/blob/main/README.md#support).

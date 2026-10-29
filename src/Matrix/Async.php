@@ -6,13 +6,16 @@ namespace Matrix;
 
 use Matrix\Events\EventDispatcher;
 use Matrix\Exceptions\AsyncException;
+use Matrix\Exceptions\CancellationException;
 use Matrix\Exceptions\RetryException;
 use Matrix\Exceptions\TimeoutException;
 use Matrix\Interfaces\Async as AsyncInterface;
 use Matrix\Metrics\MetricsCollector;
 use Matrix\Promise\PromisePool;
+use Matrix\Promise\TaskScheduler;
 use Matrix\Support\Lifecycle;
 use Matrix\Support\LoopManager;
+use Matrix\Support\OperationState;
 use Matrix\Support\RateLimiter;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
@@ -45,17 +48,63 @@ final class Async implements AsyncInterface
         return self::$metricsCollector ??= new MetricsCollector;
     }
 
-    /** @param callable(): mixed $callable @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  callable(): (T|PromiseInterface<T>)  $callable
+     * @return PromiseInterface<T>
+     */
     public static function coro(callable $callable): PromiseInterface
     {
-        $deferred = new Deferred;
-
-        LoopManager::nextTick(static function () use ($callable, $deferred): void {
-            try {
-                Promise\resolve($callable())->then([$deferred, 'resolve'], [$deferred, 'reject']);
-            } catch (\Throwable $exception) {
-                $deferred->reject($exception);
+        $state = OperationState::create();
+        /** @var PromiseInterface<mixed>|null $active */
+        $active = null;
+        $deferred = new Deferred(static function () use ($state, &$active): void {
+            if ($state->isSettled()) {
+                return;
             }
+            $state->settle();
+            $active?->cancel();
+
+            throw new CancellationException;
+        });
+
+        LoopManager::nextTick(static function () use ($callable, $deferred, $state, &$active): void {
+            if ($state->isSettled()) {
+                return;
+            }
+
+            try {
+                $active = Promise\resolve($callable());
+            } catch (\Throwable $exception) {
+                $state->settle();
+                $deferred->reject($exception);
+
+                return;
+            }
+
+            // @phpstan-ignore if.alwaysFalse (The factory may cancel its enclosing operation re-entrantly.)
+            if ($state->isSettled()) {
+                $active->cancel();
+
+                return;
+            }
+            $active->then(
+                static function (mixed $value) use ($deferred, $state): void {
+                    // @phpstan-ignore booleanNot.alwaysTrue (Source settlement happens after this callback is registered.)
+                    if (! $state->isSettled()) {
+                        $state->settle();
+                        $deferred->resolve($value);
+                    }
+                },
+                static function (\Throwable $error) use ($deferred, $state): void {
+                    // @phpstan-ignore booleanNot.alwaysTrue (Source settlement happens after this callback is registered.)
+                    if (! $state->isSettled()) {
+                        $state->settle();
+                        $deferred->reject($error);
+                    }
+                }
+            );
         });
 
         return Lifecycle::track($deferred->promise(), 'coro');
@@ -66,11 +115,16 @@ final class Async implements AsyncInterface
         return Lifecycle::id();
     }
 
-    /** @param PromiseInterface<mixed> $promise @return mixed */
+    /**
+     * @template T
+     *
+     * @param  PromiseInterface<T>  $promise
+     * @return T|null
+     */
     public static function await(PromiseInterface $promise, ?float $timeout = null): mixed
     {
-        if ($timeout !== null && $timeout <= 0) {
-            throw new \InvalidArgumentException('Await timeout must be greater than zero.');
+        if ($timeout !== null && (! is_finite($timeout) || $timeout <= 0)) {
+            throw new \InvalidArgumentException('Await timeout must be finite and greater than zero.');
         }
 
         if (LoopManager::isRunning()) {
@@ -79,7 +133,7 @@ final class Async implements AsyncInterface
 
         $value = null;
         $error = null;
-        $settled = false;
+        $state = OperationState::create();
         /** @var TimerInterface|null $timer */
         $timer = null;
         $finish = static function () use (&$timer): void {
@@ -87,39 +141,66 @@ final class Async implements AsyncInterface
                 LoopManager::cancelTimer($timer);
                 $timer = null;
             }
-            LoopManager::stop();
+
+            if (LoopManager::isRunning()) {
+                LoopManager::stop();
+            }
         };
 
         $promise->then(
-            static function (mixed $result) use (&$value, &$settled, $finish): void {
+            static function (mixed $result) use (&$value, $state, $finish): void {
+                if ($state->isSettled()) {
+                    return;
+                }
                 $value = $result;
-                $settled = true;
+                $state->settle();
                 $finish();
             },
-            static function (\Throwable $reason) use (&$error, &$settled, $finish): void {
+            static function (\Throwable $reason) use (&$error, $state, $finish): void {
+                if ($state->isSettled()) {
+                    return;
+                }
                 $error = $reason;
-                $settled = true;
+                $state->settle();
                 $finish();
             }
         );
 
-        if (! $settled && $timeout !== null) {
-            $timer = LoopManager::delay($timeout, static function () use (&$error, &$settled, $finish, $promise, $timeout): void {
-                if ($settled) {
-                    return;
-                }
-                $settled = true;
+        if (! $state->isSettled() && $timeout !== null) {
+            $timer = LoopManager::delay($timeout, static function () use (&$error, $state, &$timer, $finish, $promise, $timeout): void {
+                $state->settle();
+                $timer = null;
                 $error = new TimeoutException($timeout);
                 $promise->cancel();
                 $finish();
             });
         }
 
-        if (! $settled) {
-            LoopManager::run();
+        if (! $state->isSettled()) {
+            try {
+                LoopManager::run();
+            } catch (\Throwable $loopError) {
+                $state->settle();
+                $finish();
+
+                try {
+                    $promise->cancel();
+                } catch (\Throwable) {
+                    // Preserve the event-loop error that ended this wait.
+                }
+
+                throw $loopError;
+            }
         }
 
-        if (! $settled) {
+        if (! $state->isSettled()) {
+            $state->settle();
+
+            if ($timer !== null) {
+                LoopManager::cancelTimer($timer);
+                $timer = null;
+            }
+
             throw new AsyncException('Promise did not settle before the event loop became idle.');
         }
 
@@ -130,49 +211,75 @@ final class Async implements AsyncInterface
         return $value;
     }
 
-    /** @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  T|null  $value
+     * @return PromiseInterface<T|null>
+     */
     public static function delay(float $seconds, mixed $value = null): PromiseInterface
     {
-        if ($seconds < 0) {
-            throw new \InvalidArgumentException('Delay must not be negative.');
+        if (! is_finite($seconds) || $seconds < 0) {
+            throw new \InvalidArgumentException('Delay must be finite and not negative.');
         }
 
         /** @var TimerInterface|null $timer */
         $timer = null;
-        $deferred = new Deferred(static function () use (&$timer): void {
+        $state = OperationState::create();
+        $deferred = new Deferred(static function () use (&$timer, $state): void {
+            if ($state->isSettled()) {
+                return;
+            }
+            $state->settle();
+
             if ($timer !== null) {
                 LoopManager::cancelTimer($timer);
                 $timer = null;
             }
+
+            throw new CancellationException;
         });
-        $timer = LoopManager::delay($seconds, static function () use ($deferred, $value): void {
+        $timer = LoopManager::delay($seconds, static function () use ($deferred, $value, $state, &$timer): void {
+            if ($state->isSettled()) {
+                return;
+            }
+            $state->settle();
+            $timer = null;
             $deferred->resolve($value);
         });
 
         return Lifecycle::track($deferred->promise(), 'delay');
     }
 
-    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  PromiseInterface<T>  $promise
+     * @return PromiseInterface<T>
+     */
     public static function timeout(PromiseInterface $promise, float $seconds, string $message = 'Operation timed out'): PromiseInterface
     {
-        if ($seconds <= 0) {
-            throw new \InvalidArgumentException('Timeout must be greater than zero.');
+        if (! is_finite($seconds) || $seconds <= 0) {
+            throw new \InvalidArgumentException('Timeout must be finite and greater than zero.');
         }
 
         $id = Lifecycle::id();
         /** @var TimerInterface|null $timer */
         $timer = null;
-        $settled = false;
-        $deferred = new Deferred(static function () use (&$timer, &$settled, $promise): void {
-            if ($settled) {
+        $state = OperationState::create();
+        $deferred = new Deferred(static function () use (&$timer, $state, $promise): void {
+            if ($state->isSettled()) {
                 return;
             }
-            $settled = true;
+            $state->settle();
 
             if ($timer !== null) {
                 LoopManager::cancelTimer($timer);
+                $timer = null;
             }
             $promise->cancel();
+
+            throw new CancellationException;
         });
         $finish = static function () use (&$timer): void {
             if ($timer !== null) {
@@ -182,56 +289,76 @@ final class Async implements AsyncInterface
         };
 
         $promise->then(
-            static function (mixed $value) use ($deferred, &$settled, $finish): void {
-                if ($settled) {
+            static function ($value) use ($deferred, $state, $finish): void {
+                if ($state->isSettled()) {
                     return;
                 }
-                $settled = true;
+                $state->settle();
                 $finish();
                 $deferred->resolve($value);
             },
-            static function (\Throwable $reason) use ($deferred, &$settled, $finish): void {
-                if ($settled) {
+            static function (\Throwable $reason) use ($deferred, $state, $finish): void {
+                if ($state->isSettled()) {
                     return;
                 }
-                $settled = true;
+                $state->settle();
                 $finish();
                 $deferred->reject($reason);
             }
         );
 
-        $timer = LoopManager::delay($seconds, static function () use ($deferred, &$settled, $promise, $seconds, $message, $id): void {
-            if ($settled) {
-                return;
-            }
-            $settled = true;
-            Lifecycle::timeout($id, 'timeout', $seconds, $message);
-            $promise->cancel();
-            $deferred->reject(new TimeoutException($seconds, $message));
-        });
+        if (! $state->isSettled()) {
+            $timer = LoopManager::delay($seconds, static function () use ($deferred, $state, &$timer, $promise, $seconds, $message, $id): void {
+                $state->settle();
+                $timer = null;
+                Lifecycle::timeout($id, 'timeout', $seconds, $message);
+                $promise->cancel();
+                $deferred->reject(new TimeoutException($seconds, $message));
+            });
+        }
 
         return Lifecycle::track($deferred->promise(), 'timeout', $id);
     }
 
-    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
-    public static function all(iterable $promisesOrValues): PromiseInterface
+    /**
+     * @template T
+     *
+     * @param  iterable<array-key, PromiseInterface<T>|T>  $promises
+     * @return PromiseInterface<array<array-key, T>>
+     */
+    public static function all(iterable $promises): PromiseInterface
     {
-        return Lifecycle::track(Promise\all($promisesOrValues), 'all');
+        return Lifecycle::track(Promise\all($promises), 'all');
     }
 
-    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
-    public static function any(iterable $promisesOrValues): PromiseInterface
+    /**
+     * @template T
+     *
+     * @param  iterable<array-key, PromiseInterface<T>|T>  $promises
+     * @return PromiseInterface<T>
+     */
+    public static function any(iterable $promises): PromiseInterface
     {
-        return Lifecycle::track(Promise\any($promisesOrValues), 'any');
+        return Lifecycle::track(Promise\any($promises), 'any');
     }
 
-    /** @param iterable<array-key, mixed> $promisesOrValues @return PromiseInterface<mixed> */
-    public static function race(iterable $promisesOrValues): PromiseInterface
+    /**
+     * @template T
+     *
+     * @param  iterable<array-key, PromiseInterface<T>|T>  $promises
+     * @return PromiseInterface<T>
+     */
+    public static function race(iterable $promises): PromiseInterface
     {
-        return Lifecycle::track(Promise\race($promisesOrValues), 'race');
+        return Lifecycle::track(Promise\race($promises), 'race');
     }
 
-    /** @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  T|PromiseInterface<T>  $value
+     * @return PromiseInterface<T>
+     */
     public static function resolve(mixed $value): PromiseInterface
     {
         return Lifecycle::track(Promise\resolve($value), 'resolve');
@@ -243,31 +370,79 @@ final class Async implements AsyncInterface
         return Lifecycle::track(Promise\reject($reason), 'reject');
     }
 
-    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     * @template U
+     *
+     * @param  iterable<array-key, T>  $items
+     * @param  callable(T): (U|PromiseInterface<U>)  $callback
+     * @param  (callable(int, int|null): void)|null  $onProgress
+     * @return PromiseInterface<array<array-key, U>>
+     */
     public static function map(iterable $items, callable $callback, int $concurrency = 0, ?callable $onProgress = null): PromiseInterface
     {
         if ($concurrency < 0) {
             throw new \InvalidArgumentException('Map concurrency must be zero or greater.');
         }
 
-        return Lifecycle::track(self::mapInternal($items, $callback, $concurrency, $onProgress), 'map');
+        return Lifecycle::track(TaskScheduler::run($items, $callback, $concurrency, $onProgress), 'map');
     }
 
-    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     * @template U
+     *
+     * @param  iterable<array-key, T>  $items
+     * @param  callable(list<T>): (iterable<array-key, U>|PromiseInterface<iterable<array-key, U>>)  $batchCallback
+     * @return PromiseInterface<list<U>>
+     */
     public static function batch(iterable $items, callable $batchCallback, int $batchSize = 10, int $concurrency = 1): PromiseInterface
     {
         if ($batchSize < 1 || $concurrency < 1) {
             throw new \InvalidArgumentException('Batch size and concurrency must be positive.');
         }
 
-        $batches = array_chunk(array_values(iterator_to_array($items, false)), $batchSize);
+        $batches = static function () use ($items, $batchSize): \Generator {
+            $batch = [];
 
-        return Lifecycle::track(self::mapInternal($batches, $batchCallback, $concurrency, null)->then(
-            static fn (array $results): array => array_merge(...$results)
-        ), 'batch');
+            foreach ($items as $item) {
+                $batch[] = $item;
+
+                if (count($batch) === $batchSize) {
+                    yield $batch;
+                    $batch = [];
+                }
+            }
+
+            if ($batch !== []) {
+                yield $batch;
+            }
+        };
+
+        $promise = TaskScheduler::run($batches(), $batchCallback, $concurrency)->then(
+            static function (array $results): array {
+                $flattened = [];
+
+                foreach ($results as $batchResult) {
+                    foreach (self::assertBatchIterable($batchResult) as $value) {
+                        $flattened[] = $value;
+                    }
+                }
+
+                return $flattened;
+            }
+        );
+
+        return Lifecycle::track($promise, 'batch');
     }
 
-    /** @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  callable(): (T|PromiseInterface<T>)  $factory
+     * @param  (callable(int, \Throwable): mixed)|null  $backoffStrategy
+     * @return PromiseInterface<T>
+     */
     public static function retry(callable $factory, int $maxAttempts = 3, ?callable $backoffStrategy = null): PromiseInterface
     {
         if ($maxAttempts < 1) {
@@ -280,22 +455,28 @@ final class Async implements AsyncInterface
         $active = null;
         /** @var TimerInterface|null $timer */
         $timer = null;
-        $settled = false;
-        $deferred = new Deferred(static function () use (&$active, &$timer, &$settled): void {
-            $settled = true;
+        $state = OperationState::create();
+        $deferred = new Deferred(static function () use (&$active, &$timer, $state): void {
+            if ($state->isSettled()) {
+                return;
+            }
+            $state->settle();
 
             if ($timer !== null) {
                 LoopManager::cancelTimer($timer);
+                $timer = null;
             }
 
             if ($active !== null) {
                 $active->cancel();
             }
+
+            throw new CancellationException;
         });
 
         $try = null;
-        $try = static function () use (&$try, &$attempt, &$failures, &$active, &$timer, &$settled, $factory, $maxAttempts, $backoffStrategy, $deferred): void {
-            if ($settled) {
+        $try = static function () use (&$try, &$attempt, &$failures, &$active, &$timer, $state, $factory, $maxAttempts, $backoffStrategy, $deferred): void {
+            if ($state->isSettled()) {
                 return;
             }
             $attempt++;
@@ -305,44 +486,86 @@ final class Async implements AsyncInterface
             } catch (\Throwable $exception) {
                 $active = Promise\reject($exception);
             }
+
+            // The factory can cancel this retry before returning its source.
+            // @phpstan-ignore if.alwaysFalse (The factory can cancel the enclosing operation.)
+            if ($state->isSettled()) {
+                $active->then(null, static function (\Throwable $error): void {});
+                $active->cancel();
+                $active = null;
+
+                return;
+            }
             $active->then(
-                static function (mixed $value) use ($deferred, &$settled): void {
-                    if (! $settled) {
-                        $settled = true;
+                static function (mixed $value) use ($deferred, $state): void {
+                    // @phpstan-ignore booleanNot.alwaysTrue (Source settlement can happen after a retry is cancelled.)
+                    if (! $state->isSettled()) {
+                        $state->settle();
                         $deferred->resolve($value);
                     }
                 },
-                static function (\Throwable $error) use (&$try, &$attempt, &$failures, &$active, &$timer, &$settled, $maxAttempts, $backoffStrategy, $deferred): void {
-                    if ($settled) {
+                static function (\Throwable $error) use (&$try, &$attempt, &$failures, &$active, &$timer, $state, $maxAttempts, $backoffStrategy, $deferred): void {
+                    // @phpstan-ignore if.alwaysFalse (Retry cancellation can precede a late source rejection.)
+                    if ($state->isSettled()) {
                         return;
                     }
                     $active = null;
                     $failures[] = $error;
 
                     if ($attempt >= $maxAttempts) {
-                        $settled = true;
+                        $state->settle();
                         $deferred->reject(new RetryException($attempt, $failures, "All {$maxAttempts} retry attempts failed", 0, $error));
 
                         return;
                     }
-                    $delay = $backoffStrategy !== null
-                        ? $backoffStrategy($attempt, $error)
-                        : min(2 ** ($attempt - 1) * 0.1, 5.0);
+
+                    try {
+                        $delay = $backoffStrategy !== null
+                            ? $backoffStrategy($attempt, $error)
+                            : min(2 ** ($attempt - 1) * 0.1, 5.0);
+                    } catch (\Throwable $backoffError) {
+                        $state->settle();
+                        $deferred->reject($backoffError);
+
+                        return;
+                    }
+
+                    // @phpstan-ignore if.alwaysFalse (The backoff callback can cancel the retry.)
+                    if ($state->isSettled()) {
+                        return;
+                    }
 
                     if ($delay === null) {
-                        $settled = true;
+                        $state->settle();
                         $deferred->reject($error);
 
                         return;
                     }
 
-                    if ($delay < 0) {
-                        $settled = true;
-                        $deferred->reject(new \InvalidArgumentException('Retry backoff must not be negative.', 0, $error));
+                    if (! is_int($delay) && ! is_float($delay)) {
+                        $state->settle();
+                        $deferred->reject(new \InvalidArgumentException('Retry backoff must be a number or null.', 0, $error));
 
                         return;
                     }
-                    $timer = LoopManager::delay($delay, $try);
+                    $delay = (float) $delay;
+
+                    if (! is_finite($delay) || $delay < 0) {
+                        $state->settle();
+                        $deferred->reject(new \InvalidArgumentException('Retry backoff must be finite and not negative.', 0, $error));
+
+                        return;
+                    }
+
+                    try {
+                        $timer = LoopManager::delay($delay, static function () use (&$timer, $try): void {
+                            $timer = null;
+                            $try();
+                        });
+                    } catch (\Throwable $timerError) {
+                        $state->settle();
+                        $deferred->reject($timerError);
+                    }
                 }
             );
         };
@@ -352,7 +575,13 @@ final class Async implements AsyncInterface
         return Lifecycle::track($deferred->promise(), 'retry');
     }
 
-    /** @param iterable<array-key, callable(): mixed> $callables @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  iterable<array-key, callable(): (T|PromiseInterface<T>)>  $callables
+     * @param  (callable(int, int|null): void)|null  $onProgress
+     * @return PromiseInterface<array<array-key, T>>
+     */
     public static function pool(iterable $callables, int $concurrency = 5, ?callable $onProgress = null): PromiseInterface
     {
         if ($concurrency < 1) {
@@ -362,7 +591,13 @@ final class Async implements AsyncInterface
         return PromisePool::create($callables, $concurrency, $onProgress);
     }
 
-    /** @param iterable<callable(mixed): mixed> $callables @return PromiseInterface<mixed> */
+    /**
+     * @template T
+     *
+     * @param  iterable<callable(T|null): (T|PromiseInterface<T>)>  $callables
+     * @param  T|null  $initialValue
+     * @return PromiseInterface<T|null>
+     */
     public static function waterfall(iterable $callables, mixed $initialValue = null): PromiseInterface
     {
         $promise = Promise\resolve($initialValue);
@@ -374,147 +609,91 @@ final class Async implements AsyncInterface
         return Lifecycle::track($promise, 'waterfall');
     }
 
-    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    /**
+     * @param  PromiseInterface<mixed>  $promise
+     * @return PromiseInterface<mixed>
+     */
     public static function cancellable(PromiseInterface $promise, callable $onCancel): PromiseInterface
     {
-        $cancelled = false;
-        $wrapped = new Promise\Promise(
-            static function (callable $resolve, callable $reject) use ($promise): void {
-                $promise->then($resolve, $reject);
-            },
-            static function () use (&$cancelled, $onCancel, $promise): void {
-                if ($cancelled) {
-                    return;
-                }
-                $cancelled = true;
+        $state = OperationState::create();
+        $subscription = new class
+        {
+            /** @var PromiseInterface<mixed>|null */
+            public ?PromiseInterface $promise = null;
+
+            public function cancel(): void
+            {
+                $this->promise?->cancel();
+            }
+        };
+        $deferred = new Deferred(static function () use ($state, $onCancel, $subscription): void {
+            if ($state->isSettled()) {
+                return;
+            }
+            $state->settle();
+
+            try {
                 $onCancel();
-                $promise->cancel();
+            } finally {
+                $subscription->cancel();
+            }
+
+            throw new CancellationException;
+        });
+        $subscription->promise = $promise->then(
+            static function (mixed $value) use ($state, $deferred): void {
+                if (! $state->isSettled()) {
+                    $state->settle();
+                    $deferred->resolve($value);
+                }
+            },
+            static function (\Throwable $error) use ($state, $deferred): void {
+                if (! $state->isSettled()) {
+                    $state->settle();
+                    $deferred->reject($error);
+                }
             }
         );
 
-        return Lifecycle::track($wrapped, 'cancellable');
+        return Lifecycle::track($deferred->promise(), 'cancellable');
     }
 
-    /** @param PromiseInterface<mixed> $promise @return PromiseInterface<mixed> */
+    /**
+     * @param  PromiseInterface<mixed>  $promise
+     * @return PromiseInterface<mixed>
+     */
     public static function withErrorContext(PromiseInterface $promise, string $context): PromiseInterface
     {
         $result = $promise->then(
             static fn (mixed $value): mixed => $value,
             static function (\Throwable $error) use ($context): never {
                 if ($error instanceof AsyncException) {
-                    throw $error;
+                    throw $error->withContext($context);
                 }
+                $code = $error->getCode();
 
-                throw new AsyncException("{$context}: {$error->getMessage()}", $error->getCode(), $error);
+                throw new AsyncException("{$context}: {$error->getMessage()}", is_int($code) ? $code : 0, $error);
             }
         );
 
         return Lifecycle::track($result, 'error_context');
     }
 
+    /**
+     * @return callable(mixed...): PromiseInterface<mixed>
+     */
     public static function rateLimit(callable $fn, int $maxCalls, float $period): callable
     {
         return RateLimiter::create($maxCalls, $period)->limit($fn);
     }
 
-    /** @param iterable<array-key, mixed> $items @return PromiseInterface<mixed> */
-    private static function mapInternal(iterable $items, callable $callback, int $concurrency, ?callable $onProgress): PromiseInterface
+    /** @return iterable<mixed, mixed> */
+    private static function assertBatchIterable(mixed $result): iterable
     {
-        $items = is_array($items) ? $items : iterator_to_array($items, true);
-
-        if ($items === []) {
-            return Promise\resolve([]);
+        if (! is_iterable($result)) {
+            throw new \UnexpectedValueException('Each batch callback must return an iterable result.');
         }
 
-        $keys = array_keys($items);
-        $total = count($keys);
-        $position = 0;
-        $pending = 0;
-        $completed = 0;
-        $results = [];
-        $active = [];
-        $settled = false;
-        $scheduled = false;
-        $deferred = new Deferred(static function () use (&$settled, &$active): void {
-            $settled = true;
-
-            foreach ($active as $promise) {
-                $promise->cancel();
-            }
-            $active = [];
-        });
-
-        $schedule = null;
-        $pump = static function (): void {};
-        $fail = static function (\Throwable $error) use (&$settled, $deferred): void {
-            if (! $settled) {
-                $settled = true;
-                $deferred->reject($error);
-            }
-        };
-        $schedule = static function () use (&$schedule, &$scheduled, &$pump): void {
-            if ($scheduled) {
-                return;
-            }
-            $scheduled = true;
-            LoopManager::nextTick(static function () use (&$scheduled, &$pump): void {
-                $scheduled = false;
-                $pump();
-            });
-        };
-        $pump = static function () use ($schedule, &$settled, &$position, &$pending, &$completed, &$results, &$active, $items, $keys, $total, $concurrency, $callback, $onProgress, $deferred, $fail): void {
-            if ($settled) {
-                return;
-            }
-            $limit = $concurrency === 0 ? $total : $concurrency;
-
-            while (! $settled && $pending < $limit && $position < $total) {
-                $index = $position++;
-                $key = $keys[$index];
-
-                try {
-                    $promise = Promise\resolve($callback($items[$key]));
-                } catch (\Throwable $error) {
-                    $fail($error);
-
-                    return;
-                }
-                $active[$index] = $promise;
-                $pending++;
-                $promise->then(
-                    static function (mixed $value) use (&$pending, &$completed, &$results, &$active, $index, $key, $total, $onProgress, $schedule, $fail, &$settled): void {
-                        unset($active[$index]);
-                        $pending--;
-                        $completed++;
-                        $results[$key] = $value;
-
-                        if ($onProgress !== null) {
-                            try {
-                                $onProgress($completed, $total);
-                            } catch (\Throwable $error) {
-                                $fail($error);
-
-                                return;
-                            }
-                        }
-
-                        if (! $settled) {
-                            $schedule();
-                        }
-                    },
-                    static function (\Throwable $error) use ($fail): void {
-                        $fail($error);
-                    }
-                );
-            }
-
-            if (! $settled && $position >= $total && $pending === 0) {
-                $settled = true;
-                $deferred->resolve($results);
-            }
-        };
-        $schedule();
-
-        return $deferred->promise();
+        return $result;
     }
 }
